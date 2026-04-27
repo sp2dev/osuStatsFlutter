@@ -22,16 +22,18 @@ class OsuApiService {
     return '请检查网络连接，确认可以访问 osu.ppy.sh。';
   }
 
+  final http.Client _client = http.Client();
+
   Future<http.Response> _post(String url, Map<String, String> body) async {
     try {
-      return await http.post(
+      return await _client.post(
         Uri.parse(url),
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: body,
-      );
+      ).timeout(const Duration(seconds: 15));
     } catch (e) {
       throw Exception('网络请求失败\n$_platformHint\n\n原始错误: $e');
     }
@@ -39,14 +41,14 @@ class OsuApiService {
 
   Future<http.Response> _get(String url, String token) async {
     try {
-      return await http.get(
+      return await _client.get(
         Uri.parse(url),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
           'Authorization': 'Bearer $token',
         },
-      );
+      ).timeout(const Duration(seconds: 15));
     } catch (e) {
       throw Exception('网络请求失败\n$_platformHint\n\n原始错误: $e');
     }

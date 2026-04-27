@@ -45,15 +45,15 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
       _error = null;
     });
 
-    final results = <Map<String, dynamic>?>[];
-    for (final mode in _modes) {
-      try {
-        final data = await _apiService.getUserData(username, mode);
-        results.add(data);
-      } catch (e) {
-        results.add(null);
-      }
-    }
+    final results = await Future.wait(
+      _modes.map((mode) async {
+        try {
+          return await _apiService.getUserData(username, mode);
+        } catch (e) {
+          return null;
+        }
+      }),
+    );
 
     if (!mounted) return;
     setState(() {
@@ -88,23 +88,38 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
     final countryRank = stats['country_rank'];
 
     return [
-      {'label': 'pp', 'value': _formatNum(stats['pp'])},
+      {'label': 'pp', 'value': stats['pp'].toString(),
+        'icon': ImageIcon(AssetImage('assets/osulogo.png'),size: 36),},
       {
-        'label': '排名',
-        'value': globalRank != null ? '#${_formatNum(globalRank)}' : '-'
+        'label': '总排名',
+        'value': globalRank != null ? '#${_formatNum(globalRank)}' : '-',
+        'icon': Icons.public,
       },
       {
         'label': '地区排名',
-        'value': countryRank != null ? '#${_formatNum(countryRank)}' : '-'
+        'value': countryRank != null ? '#${_formatNum(countryRank)}' : '-',
+        'icon': Icons.flag,
       },
-      {'label': '准确率', 'value': accuracyStr},
-      {'label': '总击打次数', 'value': _formatNum(stats['total_hits'])},
-      {'label': '计分成绩总分', 'value': _formatNum(stats['ranked_score'])},
-      {'label': '总分数', 'value': _formatNum(stats['total_score'])},
-      {'label': '游玩次数', 'value': _formatNum(stats['play_count'])},
+      {'label': '准确率', 'value': accuracyStr, 'icon': Icons.timer},
       {
-        'label': '已游玩的谱面数量',
-        'value': _formatNum(data['beatmap_playcounts_count'])
+        'label': '总击打次数',
+        'value': _formatNum(stats['total_hits']),
+        'icon': Icons.touch_app,
+      },
+      {
+        'label': '计分成绩总分',
+        'value': _formatNum(stats['ranked_score']),
+        'icon': Icons.emoji_events,
+      },
+      {
+        'label': '总分数',
+        'value': _formatNum(stats['total_score']),
+        'icon': Icons.scoreboard,
+      },
+      {
+        'label': '游玩次数',
+        'value': _formatNum(stats['play_count']),
+        'icon': Icons.replay,
       },
     ];
   }
@@ -122,19 +137,23 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
         title: Text(_targetUser != null ? _targetUser! : '主页面'),
         bottom: TabBar(
           controller: _tabController,
-          tabs: [
-
-            // TODO: 这里的图标需要替换成 osu! 四个模式的图标
-
-            Tab(icon: Icon(Icons.circle), text: 'osu!'),
-            Tab(icon: Icon(Icons.circle), text: 'osu!taiko'),
-            Tab(icon: Icon(Icons.circle), text: 'osu!catch'),
-            Tab(icon: Icon(Icons.circle), text: 'osu!mania'),
-
-            // Tab(icon: _tabIcon("assets/Rulesets/RulesetOsu.png"), text: 'osu!'),
-            // Tab(icon: _tabIcon("assets/Rulesets/RulesetTaiko.png"), text: 'osu!taiko'),
-            // Tab(icon: _tabIcon("assets/Rulesets/RulesetCatch.png"), text: 'osu!catch'),
-            // Tab(icon: _tabIcon("assets/Rulesets/RulesetMania.png"), text: 'osu!mania'),
+          tabs: const [
+            Tab(
+              icon: ImageIcon(AssetImage('assets/Rulesets/RulesetOsu.png')),
+              text: 'osu!',
+            ),
+            Tab(
+              icon: ImageIcon(AssetImage('assets/Rulesets/RulesetTaiko.png')),
+              text: 'osu!taiko',
+            ),
+            Tab(
+              icon: ImageIcon(AssetImage('assets/Rulesets/RulesetCatch.png')),
+              text: 'osu!catch',
+            ),
+            Tab(
+              icon: ImageIcon(AssetImage('assets/Rulesets/RulesetMania.png')),
+              text: 'osu!mania',
+            ),
           ],
         ),
       ),
@@ -187,9 +206,13 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
             itemBuilder: (context, index) {
               final item = items[index];
               return ListTile(
-                leading: const Icon(Icons.music_note, size: 36),
-                title: Text(item['label'] as String),
-                subtitle: Text(item['value'] as String),
+                leading: () {
+                  final icon = item['icon'];
+                  if (icon is Widget) return icon;
+                  return Icon(icon as IconData, size: 36);
+                }(),
+                title: Text(item['label'] as String, style: TextStyle(fontSize: 15),),
+                subtitle: Text(item['value'] as String, style: TextStyle(fontSize: 25),),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {},
               );
@@ -200,7 +223,3 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
     );
   }
 }
-
-// Widget _tabIcon(String asset) {
-//   return Image.asset(asset, width: 28, height: 28, fit: BoxFit.contain);
-// }
