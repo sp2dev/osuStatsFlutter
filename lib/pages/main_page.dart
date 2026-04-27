@@ -84,6 +84,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
         ? '${(accuracy * 100).toStringAsFixed(2)}%'
         : '-';
 
+    final country = data['country_code'];
     final globalRank = stats['global_rank'];
     final countryRank = stats['country_rank'];
 
@@ -98,13 +99,13 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
       {
         'label': '地区排名',
         'value': countryRank != null ? '#${_formatNum(countryRank)}' : '-',
-        'icon': Icons.flag,
+        'icon': Image.asset('assets/Flags/$country.png', width: 36,),
       },
       {'label': '准确率', 'value': accuracyStr, 'icon': Icons.timer},
       {
-        'label': '总击打次数',
+        'label': '总命中次数',
         'value': _formatNum(stats['total_hits']),
-        'icon': Icons.touch_app,
+        'icon': ImageIcon(AssetImage('assets/hits.png'), size: 36),
       },
       {
         'label': '计分成绩总分',
@@ -119,7 +120,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
       {
         'label': '游玩次数',
         'value': _formatNum(stats['play_count']),
-        'icon': Icons.replay,
+        'icon': Icons.play_circle,
       },
     ];
   }
