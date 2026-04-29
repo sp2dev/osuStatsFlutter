@@ -69,7 +69,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
     _saveToDatabase(results);
   }
 
-  void _saveToDatabase(List<Map<String, dynamic>?> results) {
+  Future<void> _saveToDatabase(List<Map<String, dynamic>?> results) async {
     Map<String, dynamic>? firstSuccess;
     for (final r in results) {
       if (r != null) {
@@ -83,20 +83,33 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
     final username = firstSuccess['username'] as String?;
     if (userId == null || username == null) return;
 
+    final osuJson = results[0] != null ? jsonEncode(results[0]) : null;
+    final taikoJson = results[1] != null ? jsonEncode(results[1]) : null;
+    final fruitsJson = results[2] != null ? jsonEncode(results[2]) : null;
+    final maniaJson = results[3] != null ? jsonEncode(results[3]) : null;
+
     final db = DatabaseService();
-    db.saveUserData(
+    final changed = await db.hasDataChanged(
+      userId: userId,
+      osuJson: osuJson,
+      taikoJson: taikoJson,
+      fruitsJson: fruitsJson,
+      maniaJson: maniaJson,
+    );
+    if (!changed) return;
+
+    await db.saveUserData(
       userId: userId,
       username: username,
       countryCode: firstSuccess['country_code'] as String?,
       beatmapPlaycountsCount:
           firstSuccess['beatmap_playcounts_count'] as int?,
       followerCount: firstSuccess['follower_count'] as int?,
-      userAchievements:
-          firstSuccess['user_achievements'] as List?,
-      osuJson: results[0] != null ? jsonEncode(results[0]) : null,
-      taikoJson: results[1] != null ? jsonEncode(results[1]) : null,
-      fruitsJson: results[2] != null ? jsonEncode(results[2]) : null,
-      maniaJson: results[3] != null ? jsonEncode(results[3]) : null,
+      userAchievements: firstSuccess['user_achievements'] as List?,
+      osuJson: osuJson,
+      taikoJson: taikoJson,
+      fruitsJson: fruitsJson,
+      maniaJson: maniaJson,
     );
   }
 

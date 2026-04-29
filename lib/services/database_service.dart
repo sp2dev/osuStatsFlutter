@@ -89,6 +89,21 @@ class DatabaseService {
     return results.isNotEmpty ? results.first : null;
   }
 
+  Future<bool> hasDataChanged({
+    required int userId,
+    String? osuJson,
+    String? taikoJson,
+    String? fruitsJson,
+    String? maniaJson,
+  }) async {
+    final existing = await getUserById(userId);
+    if (existing == null) return true;
+    return (existing['osu_json'] as String?) != osuJson ||
+        (existing['taiko_json'] as String?) != taikoJson ||
+        (existing['fruits_json'] as String?) != fruitsJson ||
+        (existing['mania_json'] as String?) != maniaJson;
+  }
+
   Future<void> deleteUser(int userId) async {
     final db = await database;
     await db.delete('user_cache', where: 'user_id = ?', whereArgs: [userId]);
