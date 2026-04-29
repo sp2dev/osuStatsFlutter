@@ -14,6 +14,22 @@ class _HistoryPageState extends State<HistoryPage> {
 
   List<Map<String, dynamic>> _users = [];
   bool _isLoading = true;
+  String? _selectedUsername;
+
+  List<String> get _uniqueUsernames {
+    return _users
+        .map((u) => u['username'] as String)
+        .toSet()
+        .toList()
+      ..sort();
+  }
+
+  List<Map<String, dynamic>> get _filteredUsers {
+    if (_selectedUsername == null) return _users;
+    return _users
+        .where((u) => u['username'] == _selectedUsername)
+        .toList();
+  }
 
   @override
   void initState() {
@@ -28,6 +44,10 @@ class _HistoryPageState extends State<HistoryPage> {
     setState(() {
       _users = users;
       _isLoading = false;
+      if (_selectedUsername != null &&
+          !_users.any((u) => u['username'] == _selectedUsername)) {
+        _selectedUsername = null;
+      }
     });
   }
 
@@ -53,70 +73,118 @@ class _HistoryPageState extends State<HistoryPage> {
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: _loadUsers,
-      child: ListView.builder(
-        itemCount: _users.length,
-        itemBuilder: (context, index) {
-          final user = _users[index];
-          final updatedAt = user['updated_at'] as int;
-          final dateStr = DateTime.fromMillisecondsSinceEpoch(updatedAt)
-              .toString()
-              .substring(0, 16)
-              .replaceFirst('T', ' ');
+    final filtered = _filteredUsers;
 
-          return Dismissible(
-            key: Key('user_${user['user_id']}'),
-            direction: DismissDirection.endToStart,
-            background: Container(
-              alignment: Alignment.centerRight,
-              padding: const EdgeInsets.only(right: 16),
-              color: Colors.red,
-              child: const Icon(Icons.delete, color: Colors.white),
-            ),
-            confirmDismiss: (_) async {
-              return await showDialog<bool>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('确认删除'),
-                  content: Text('删除 ${user['username']} 的缓存数据？'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx, false),
-                      child: const Text('取消'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx, true),
-                      child: const Text('删除'),
-                    ),
-                  ],
-                ),
-              );
-            },
-            onDismissed: (_) {
-              _db.deleteUser(user['user_id'] as int);
-              _loadUsers();
-            },
-            child: ListTile(
-              leading: CircleAvatar(
-                child: Text(user['username'].toString()[0].toUpperCase()),
+    return Column(
+      children: [
+        SizedBox(height: 20),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: DropdownButton<String>(
+            value: _selectedUsername,
+            isExpanded: true,
+            hint: const Text('全部玩家'),
+            items: [
+              const DropdownMenuItem<String>(
+                value: null,
+                child: Text('全部玩家', style: TextStyle(fontWeight: FontWeight.bold)),
               ),
-              title: Text(user['username'] as String),
-              subtitle: Text('更新于 $dateStr'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => HistoryDetailPage(user: user),
+              ..._uniqueUsernames.map(
+                (name) => DropdownMenuItem<String>(
+                  value: name,
+                  child: Text(name),
+                ),
+              ),
+            ],
+            onChanged: (value) {
+              setState(() => _selectedUsername = value);
+            },
+          ),
+        ),
+        Expanded(
+          child: filtered.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.person_off, size: 48, color: Colors.grey),
+                      const SizedBox(height: 8),
+                      Text('$_selectedUsername 暂无记录',
+                          style: const TextStyle(color: Colors.grey)),
+                    ],
                   ),
-                );
-                _loadUsers();
-              },
-            ),
-          );
-        },
-      ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _loadUsers,
+                  child: ListView.builder(
+                    itemCount: filtered.length,
+                    itemBuilder: (context, index) {
+                      final user = filtered[index];
+                      final updatedAt = user['updated_at'] as int;
+                      final dateStr = DateTime.fromMillisecondsSinceEpoch(updatedAt)
+                          .toString()
+                          .substring(0, 16)
+                          .replaceFirst('T', ' ');
+
+                      return Dismissible(
+                        key: Key('record_${user['id']}'),
+                        direction: DismissDirection.endToStart,
+                        background: Container(
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.only(right: 16),
+                          color: Colors.red,
+                          child: const Icon(Icons.delete, color: Colors.white),
+                        ),
+                        confirmDismiss: (_) async {
+                          return await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('确认删除'),
+                              content:
+                                  Text('删除 ${user['username']} 的缓存数据？'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, false),
+                                  child: const Text('取消'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  child: const Text('删除'),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                        onDismissed: (_) {
+                          _db.deleteRecord(user['id'] as int);
+                          _loadUsers();
+                        },
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            child: Text(user['username']
+                                .toString()[0]
+                                .toUpperCase()),
+                          ),
+                          title: Text(user['username'] as String),
+                          subtitle: Text('更新于 $dateStr'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    HistoryDetailPage(user: user),
+                              ),
+                            );
+                            _loadUsers();
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+        ),
+      ],
     );
   }
 }

@@ -83,18 +83,13 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
     final username = firstSuccess['username'] as String?;
     if (userId == null || username == null) return;
 
-    final osuJson = results[0] != null ? jsonEncode(results[0]) : null;
-    final taikoJson = results[1] != null ? jsonEncode(results[1]) : null;
-    final fruitsJson = results[2] != null ? jsonEncode(results[2]) : null;
-    final maniaJson = results[3] != null ? jsonEncode(results[3]) : null;
-
     final db = DatabaseService();
-    final changed = await db.hasDataChanged(
+    final changed = await db.hasChangedFromLatest(
       userId: userId,
-      osuJson: osuJson,
-      taikoJson: taikoJson,
-      fruitsJson: fruitsJson,
-      maniaJson: maniaJson,
+      osuData: results[0],
+      taikoData: results[1],
+      fruitsData: results[2],
+      maniaData: results[3],
     );
     if (!changed) return;
 
@@ -106,10 +101,10 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
           firstSuccess['beatmap_playcounts_count'] as int?,
       followerCount: firstSuccess['follower_count'] as int?,
       userAchievements: firstSuccess['user_achievements'] as List?,
-      osuJson: osuJson,
-      taikoJson: taikoJson,
-      fruitsJson: fruitsJson,
-      maniaJson: maniaJson,
+      osuJson: results[0] != null ? jsonEncode(results[0]) : null,
+      taikoJson: results[1] != null ? jsonEncode(results[1]) : null,
+      fruitsJson: results[2] != null ? jsonEncode(results[2]) : null,
+      maniaJson: results[3] != null ? jsonEncode(results[3]) : null,
     );
   }
 
