@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/osu_api_service.dart';
+import '../services/database_service.dart';
 import '../utils.dart';
 
 class MainPage extends StatefulWidget {
@@ -63,74 +65,47 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
       }
       _isLoading = false;
     });
+
+    _saveToDatabase(results);
   }
 
-  String _formatNum(dynamic val) {
-    if (val == null) return '-';
-    final str = val is int ? val.toString() : val.toString();
-    if (str.isEmpty) return '-';
-    final buffer = StringBuffer();
-    for (int i = 0; i < str.length; i++) {
-      if (i > 0 && (str.length - i) % 3 == 0) buffer.write(',');
-      buffer.write(str[i]);
+  Future<void> _saveToDatabase(List<Map<String, dynamic>?> results) async {
+    Map<String, dynamic>? firstSuccess;
+    for (final r in results) {
+      if (r != null) {
+        firstSuccess = r;
+        break;
+      }
     }
-    return buffer.toString();
-  }
+    if (firstSuccess == null) return;
 
-  List<Map<String, dynamic>> _buildItems(Map<String, dynamic> data) {
-    final stats = data['statistics'] as Map<String, dynamic>? ?? {};
+    final userId = firstSuccess['id'] as int?;
+    final username = firstSuccess['username'] as String?;
+    if (userId == null || username == null) return;
 
-    final accuracy = stats['accuracy'] as num?;
-    final accuracyStr = accuracy != null
-        ? '${(accuracy * 100).toStringAsFixed(2)}%'
-        : '-';
+    final db = DatabaseService();
+    final changed = await db.hasChangedFromLatest(
+      userId: userId,
+      osuData: results[0],
+      taikoData: results[1],
+      fruitsData: results[2],
+      maniaData: results[3],
+    );
+    if (!changed) return;
 
-    final playtime = stats['play_time'] as int? ?? 0;
-    final country = data['country_code'];
-    final globalRank = stats['global_rank'];
-    final countryRank = stats['country_rank'];
-
-    return [
-      {'label': 'pp', 'value': stats['pp'].toString(),
-        'icon': ImageIcon(AssetImage('assets/osulogo.png'),size: 36),},
-      {
-        'label': '总排名',
-        'value': globalRank != null ? '#${_formatNum(globalRank)}' : '-',
-        'icon': Icons.public,
-      },
-      {
-        'label': '地区排名',
-        'value': countryRank != null ? '#${_formatNum(countryRank)}' : '-',
-        'icon': Image.asset('assets/Flags/$country.png', width: 36,),
-      },
-      {'label': '准确率', 'value': accuracyStr,
-        'icon': ImageIcon(AssetImage('assets/accuracy.png'), size: 36)},
-      {
-        'label': '总命中次数',
-        'value': _formatNum(stats['total_hits']),
-        'icon': ImageIcon(AssetImage('assets/hits.png'), size: 36),
-      },
-      {
-        'label': '计分成绩总分',
-        'value': _formatNum(stats['ranked_score']),
-        'icon': Icons.emoji_events,
-      },
-      {
-        'label': '总分数',
-        'value': _formatNum(stats['total_score']),
-        'icon': Icons.scoreboard,
-      },
-      {
-        'label': '游玩次数',
-        'value': _formatNum(stats['play_count']),
-        'icon': Icons.play_circle,
-      },
-      {
-        'label': '游玩时间',
-        'value': formatDuration(playtime),
-        'icon': Icons.timer,
-      },
-    ];
+    await db.saveUserData(
+      userId: userId,
+      username: username,
+      countryCode: firstSuccess['country_code'] as String?,
+      beatmapPlaycountsCount:
+          firstSuccess['beatmap_playcounts_count'] as int?,
+      followerCount: firstSuccess['follower_count'] as int?,
+      userAchievements: firstSuccess['user_achievements'] as List?,
+      osuJson: results[0] != null ? jsonEncode(results[0]) : null,
+      taikoJson: results[1] != null ? jsonEncode(results[1]) : null,
+      fruitsJson: results[2] != null ? jsonEncode(results[2]) : null,
+      maniaJson: results[3] != null ? jsonEncode(results[3]) : null,
+    );
   }
 
   @override
@@ -207,7 +182,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
         if (data == null) {
           return const Center(child: Text('暂无数据'));
         }
-        final items = _buildItems(data);
+        final items = buildStatsItems(data);
         return RefreshIndicator(
           onRefresh: _loadAllData,
           child: ListView.builder(
