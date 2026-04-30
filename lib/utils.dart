@@ -24,18 +24,14 @@ String formatDuration(int seconds) {
   int minutes = (seconds % hourSeconds) ~/ minuteSeconds;
   int secs = seconds % minuteSeconds;
 
-  if (days > 0) {
-    if (hours > 0) return '$days 天 $hours 小时 $minutes 分钟 $secs 秒';
-    return '$days 天';
-  } else if (hours > 0) {
-    if (minutes > 0) return '$hours 小时 $minutes 分钟 $secs 秒';
-    return '$hours 小时';
-  } else if (minutes > 0) {
-    if (secs > 0) return '$minutes 分钟 $secs 秒';
-    return '$minutes 分钟';
-  } else {
-    return '$secs 秒';
-  }
+  final parts = <String>[];
+  if (days > 0) parts.add('$days 天');
+  if (hours > 0) parts.add('$hours 小时');
+  if (minutes > 0) parts.add('$minutes 分钟');
+  if (secs > 0) parts.add('$secs 秒');
+
+  if (parts.isEmpty) return '0秒';
+  return parts.join(' ');
 }
 
 List<Map<String, dynamic>> buildStatsItems(Map<String, dynamic> data) {
