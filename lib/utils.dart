@@ -34,8 +34,38 @@ String formatDuration(int seconds) {
   return parts.join(' ');
 }
 
-List<Map<String, dynamic>> buildStatsItems(Map<String, dynamic> data) {
+Map<String, dynamic>? _getDiffInfo(num? current, num? previous, {bool lowerIsBetter = false, bool isPercent = false, bool isTime = false}) {
+  if (current == null || previous == null) return null;
+  final double diff = lowerIsBetter ? (previous - current).toDouble() : (current - previous).toDouble();
+  if (diff == 0) return null;
+
+  final isPositive = diff > 0;
+  final sign = diff > 0 ? '+' : '';
+
+  String text;
+  if (isPercent) {
+    text = '$sign${(diff * 100).toStringAsFixed(2)}%';
+  } else if (isTime) {
+    text = '$sign${formatDuration(diff.abs().toInt())}';
+  } else {
+    if (diff == diff.toInt()) {
+      text = '$sign${formatNum(diff.toInt())}';
+    } else {
+      text = '$sign${diff.toStringAsFixed(2)}';
+    }
+  }
+
+  return {
+    'text': text,
+    'isPositive': isPositive,
+  };
+}
+
+List<Map<String, dynamic>> buildStatsItems(Map<String, dynamic> data, [Map<String, dynamic>? previousData]) {
   final stats = data['statistics'] as Map<String, dynamic>? ?? {};
+  final prevStats = previousData != null
+      ? (previousData['statistics'] as Map<String, dynamic>? ?? {})
+      : null;
 
   final accuracy = stats['accuracy'] as num?;
   final accuracyStr = accuracy != null
@@ -48,8 +78,9 @@ List<Map<String, dynamic>> buildStatsItems(Map<String, dynamic> data) {
   return [
     {
       'label': 'pp',
-      'value': stats['pp'].toString(),
-      'icon': ImageIcon(AssetImage('assets/osulogo.png'), size: 36),
+      'value': stats['pp'] != null ? stats['pp'].toString() : '-',
+      'icon': const ImageIcon(AssetImage('assets/osulogo.png'), size: 36),
+      'difference': _getDiffInfo(stats['pp'] as num?, prevStats?['pp'] as num?),
     },
     {
       'label': '总排名',
@@ -57,6 +88,7 @@ List<Map<String, dynamic>> buildStatsItems(Map<String, dynamic> data) {
           ? '#${formatNum(stats['global_rank'])}'
           : '-',
       'icon': Icons.public,
+      'difference': _getDiffInfo(stats['global_rank'] as num?, prevStats?['global_rank'] as num?, lowerIsBetter: true),
     },
     {
       'label': '地区排名',
@@ -66,36 +98,43 @@ List<Map<String, dynamic>> buildStatsItems(Map<String, dynamic> data) {
       'icon': country != null
           ? Image.asset('assets/Flags/$country.png', width: 36)
           : Icons.flag,
+      'difference': _getDiffInfo(stats['country_rank'] as num?, prevStats?['country_rank'] as num?, lowerIsBetter: true),
     },
     {
       'label': '准确率',
       'value': accuracyStr,
-      'icon': ImageIcon(AssetImage('assets/accuracy.png'), size: 36),
+      'icon': const ImageIcon(AssetImage('assets/accuracy.png'), size: 36),
+      'difference': _getDiffInfo(stats['accuracy'] as num?, prevStats?['accuracy'] as num?, isPercent: true),
     },
     {
       'label': '总命中次数',
       'value': formatNum(stats['total_hits']),
-      'icon': ImageIcon(AssetImage('assets/hits.png'), size: 36),
+      'icon': const ImageIcon(AssetImage('assets/hits.png'), size: 36),
+      'difference': _getDiffInfo(stats['total_hits'] as num?, prevStats?['total_hits'] as num?),
     },
     {
       'label': '计分成绩总分',
       'value': formatNum(stats['ranked_score']),
       'icon': Icons.emoji_events,
+      'difference': _getDiffInfo(stats['ranked_score'] as num?, prevStats?['ranked_score'] as num?),
     },
     {
       'label': '总分数',
       'value': formatNum(stats['total_score']),
       'icon': Icons.scoreboard,
+      'difference': _getDiffInfo(stats['total_score'] as num?, prevStats?['total_score'] as num?),
     },
     {
       'label': '游玩次数',
       'value': formatNum(stats['play_count']),
       'icon': Icons.play_circle,
+      'difference': _getDiffInfo(stats['play_count'] as num?, prevStats?['play_count'] as num?),
     },
     {
       'label': '游玩时间',
       'value': formatDuration(playtime),
       'icon': Icons.timer,
+      'difference': _getDiffInfo(stats['play_time'] as num?, prevStats?['play_time'] as num?, isTime: true),
     },
   ];
 }

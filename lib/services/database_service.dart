@@ -54,6 +54,18 @@ class DatabaseService {
     return results.isNotEmpty ? results.first : null;
   }
 
+  Future<Map<String, dynamic>?> getPreviousRecord(int userId, int currentUpdatedAt) async {
+    final db = await database;
+    final results = await db.query(
+      'user_cache',
+      where: 'user_id = ? AND updated_at < ?',
+      whereArgs: [userId, currentUpdatedAt],
+      orderBy: 'updated_at DESC',
+      limit: 1,
+    );
+    return results.isNotEmpty ? results.first : null;
+  }
+
   static String _stableFingerprint(Map<String, dynamic>? data) {
     if (data == null) return '';
     final stats = data['statistics'] as Map<String, dynamic>? ?? {};

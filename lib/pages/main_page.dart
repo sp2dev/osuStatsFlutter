@@ -19,6 +19,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
   static const _modes = ['osu', 'taiko', 'fruits', 'mania'];
 
   final List<Map<String, dynamic>?> _modeData = [null, null, null, null];
+  Map<String, dynamic>? _previousRecord;
   bool _isLoading = true;
   String? _error;
   String? _targetUser;
@@ -59,10 +60,27 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
     );
 
     if (!mounted) return;
+
+    Map<String, dynamic>? latestRecord;
+    Map<String, dynamic>? firstSuccess;
+    for (final r in results) {
+      if (r != null) {
+        firstSuccess = r;
+        break;
+      }
+    }
+    if (firstSuccess != null) {
+      final userId = firstSuccess['id'] as int?;
+      if (userId != null) {
+        latestRecord = await DatabaseService().getLatestRecord(userId);
+      }
+    }
+
     setState(() {
       for (int i = 0; i < results.length; i++) {
         _modeData[i] = results[i];
       }
+      _previousRecord = latestRecord;
       _isLoading = false;
     });
 
@@ -182,7 +200,17 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
         if (data == null) {
           return const Center(child: Text('暂无数据'));
         }
-        final items = buildStatsItems(data);
+        Map<String, dynamic>? prevData;
+        if (_previousRecord != null) {
+          final modeKeys = ['osu_json', 'taiko_json', 'fruits_json', 'mania_json'];
+          final jsonStr = _previousRecord![modeKeys[tabIndex]] as String?;
+          if (jsonStr != null && jsonStr.isNotEmpty) {
+            try {
+              prevData = jsonDecode(jsonStr) as Map<String, dynamic>;
+            } catch (_) {}
+          }
+        }
+        final items = buildStatsItems(data, prevData);
         return RefreshIndicator(
           onRefresh: _loadAllData,
           child: ListView.builder(
@@ -197,7 +225,22 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
                 }(),
                 title: Text(item['label'] as String, style: TextStyle(fontSize: 15),),
                 subtitle: Text(item['value'] as String, style: TextStyle(fontSize: 25),),
-                trailing: const Icon(Icons.chevron_right),
+                trailing: () {
+                  final diff = item['difference'];
+                  if (diff != null) {
+                    final diffText = diff['text'] as String;
+                    final isPositive = diff['isPositive'] as bool;
+                    return Text(
+                      diffText,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: isPositive ? Colors.green : Colors.red,
+                      ),
+                    );
+                  }
+                  return null;
+                }(),
                 onTap: () {},
               );
             },

@@ -357,7 +357,6 @@ class _HistoryPageState extends State<HistoryPage> {
                                   ],
                                 ),
                               ),
-                              const Icon(Icons.chevron_right),
                             ],
                           ),
                         ),

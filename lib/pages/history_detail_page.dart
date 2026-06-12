@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../services/database_service.dart';
 import '../utils.dart';
 
 class HistoryDetailPage extends StatefulWidget {
@@ -14,6 +15,7 @@ class HistoryDetailPage extends StatefulWidget {
 class _HistoryDetailPageState extends State<HistoryDetailPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
+  Map<String, dynamic>? _previousRecord;
 
   Map<String, dynamic>? _decodeModeJson(String? json) {
     if (json == null || json.isEmpty) return null;
@@ -28,6 +30,19 @@ class _HistoryDetailPageState extends State<HistoryDetailPage>
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _loadPreviousRecord();
+  }
+
+  Future<void> _loadPreviousRecord() async {
+    final userId = widget.user['user_id'] as int?;
+    final updatedAt = widget.user['updated_at'] as int?;
+    if (userId != null && updatedAt != null) {
+      final prev = await DatabaseService().getPreviousRecord(userId, updatedAt);
+      if (!mounted) return;
+      setState(() {
+        _previousRecord = prev;
+      });
+    }
   }
 
   @override
@@ -47,6 +62,16 @@ class _HistoryDetailPageState extends State<HistoryDetailPage>
       user['mania_json'],
     ];
     final modeData = modeJsons.map((e) => _decodeModeJson(e as String?)).toList();
+
+    final prevModeJsons = _previousRecord != null
+        ? [
+            _previousRecord!['osu_json'],
+            _previousRecord!['taiko_json'],
+            _previousRecord!['fruits_json'],
+            _previousRecord!['mania_json'],
+          ]
+        : [null, null, null, null];
+    final prevModeData = prevModeJsons.map((e) => _decodeModeJson(e as String?)).toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -77,10 +102,11 @@ class _HistoryDetailPageState extends State<HistoryDetailPage>
         controller: _tabController,
         children: List.generate(4, (tabIndex) {
           final data = modeData[tabIndex];
+          final prevData = prevModeData[tabIndex];
           if (data == null) {
             return const Center(child: Text('暂无数据'));
           }
-          final items = buildStatsItems(data);
+          final items = buildStatsItems(data, prevData);
           return ListView.builder(
             itemCount: items.length,
             itemBuilder: (context, index) {
@@ -95,7 +121,22 @@ class _HistoryDetailPageState extends State<HistoryDetailPage>
                     style: const TextStyle(fontSize: 15)),
                 subtitle: Text(item['value'] as String,
                     style: const TextStyle(fontSize: 25)),
-                trailing: const Icon(Icons.chevron_right),
+                trailing: () {
+                  final diff = item['difference'];
+                  if (diff != null) {
+                    final diffText = diff['text'] as String;
+                    final isPositive = diff['isPositive'] as bool;
+                    return Text(
+                      diffText,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: isPositive ? Colors.green : Colors.red,
+                      ),
+                    );
+                  }
+                  return null;
+                }(),
                 onTap: () {},
               );
             },
