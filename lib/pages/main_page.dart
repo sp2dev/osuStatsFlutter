@@ -19,7 +19,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
   static const _modes = ['osu', 'taiko', 'fruits', 'mania'];
 
   final List<Map<String, dynamic>?> _modeData = [null, null, null, null];
-  Map<String, dynamic>? _previousRecord;
+  List<Map<String, dynamic>> _userHistory = [];
   List<String> _userList = [];
   bool _isLoading = true;
   String? _error;
@@ -30,6 +30,12 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     _loadAllData();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadAllData() async {
@@ -69,7 +75,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
 
     if (!mounted) return;
 
-    Map<String, dynamic>? latestRecord;
+    List<Map<String, dynamic>> userHistory = [];
     Map<String, dynamic>? firstSuccess;
     for (final r in results) {
       if (r != null) {
@@ -80,7 +86,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
     if (firstSuccess != null) {
       final userId = firstSuccess['id'] as int?;
       if (userId != null) {
-        latestRecord = await DatabaseService().getLatestRecord(userId);
+        userHistory = await DatabaseService().getRecordsForUser(userId);
       }
     }
 
@@ -95,7 +101,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
       for (int i = 0; i < results.length; i++) {
         _modeData[i] = results[i];
       }
-      _previousRecord = latestRecord;
+      _userHistory = userHistory;
       _userList = updatedNames;
       _isLoading = false;
     });
@@ -142,11 +148,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
     );
   }
 
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -201,19 +203,19 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
           controller: _tabController,
           tabs: const [
             Tab(
-              icon: ImageIcon(AssetImage('assets/Rulesets/RulesetOsu.png')),
+              icon: ImageIcon(AssetImage('assets/Rulesets/RulesetOsu.png'), size: 24),
               text: 'osu!',
             ),
             Tab(
-              icon: ImageIcon(AssetImage('assets/Rulesets/RulesetTaiko.png')),
+              icon: ImageIcon(AssetImage('assets/Rulesets/RulesetTaiko.png'), size: 24),
               text: 'osu!taiko',
             ),
             Tab(
-              icon: ImageIcon(AssetImage('assets/Rulesets/RulesetCatch.png')),
+              icon: ImageIcon(AssetImage('assets/Rulesets/RulesetCatch.png'), size: 24),
               text: 'osu!catch',
             ),
             Tab(
-              icon: ImageIcon(AssetImage('assets/Rulesets/RulesetMania.png')),
+              icon: ImageIcon(AssetImage('assets/Rulesets/RulesetMania.png'), size: 24),
               text: 'osu!mania',
             ),
           ],
@@ -282,12 +284,19 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
           return const Center(child: Text('暂无数据'));
         }
         Map<String, dynamic>? prevData;
-        if (_previousRecord != null) {
-          final modeKeys = ['osu_json', 'taiko_json', 'fruits_json', 'mania_json'];
-          final jsonStr = _previousRecord![modeKeys[tabIndex]] as String?;
+        final modeKeys = ['osu_json', 'taiko_json', 'fruits_json', 'mania_json'];
+        final modeKey = modeKeys[tabIndex];
+        
+        // Find the first record in history where stats for this mode are different from current data
+        for (final record in _userHistory) {
+          final jsonStr = record[modeKey] as String?;
           if (jsonStr != null && jsonStr.isNotEmpty) {
             try {
-              prevData = jsonDecode(jsonStr) as Map<String, dynamic>;
+              final histData = jsonDecode(jsonStr) as Map<String, dynamic>;
+              if (areStatsDifferent(data, histData)) {
+                prevData = histData;
+                break;
+              }
             } catch (_) {}
           }
         }

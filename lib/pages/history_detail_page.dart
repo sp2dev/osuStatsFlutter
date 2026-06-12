@@ -15,7 +15,7 @@ class HistoryDetailPage extends StatefulWidget {
 class _HistoryDetailPageState extends State<HistoryDetailPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
-  Map<String, dynamic>? _previousRecord;
+  List<Map<String, dynamic>> _userHistory = [];
 
   Map<String, dynamic>? _decodeModeJson(String? json) {
     if (json == null || json.isEmpty) return null;
@@ -33,22 +33,21 @@ class _HistoryDetailPageState extends State<HistoryDetailPage>
     _loadPreviousRecord();
   }
 
-  Future<void> _loadPreviousRecord() async {
-    final userId = widget.user['user_id'] as int?;
-    final updatedAt = widget.user['updated_at'] as int?;
-    if (userId != null && updatedAt != null) {
-      final prev = await DatabaseService().getPreviousRecord(userId, updatedAt);
-      if (!mounted) return;
-      setState(() {
-        _previousRecord = prev;
-      });
-    }
-  }
-
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadPreviousRecord() async {
+    final userId = widget.user['user_id'] as int?;
+    if (userId != null) {
+      final history = await DatabaseService().getRecordsForUser(userId);
+      if (!mounted) return;
+      setState(() {
+        _userHistory = history;
+      });
+    }
   }
 
   @override
@@ -63,16 +62,6 @@ class _HistoryDetailPageState extends State<HistoryDetailPage>
     ];
     final modeData = modeJsons.map((e) => _decodeModeJson(e as String?)).toList();
 
-    final prevModeJsons = _previousRecord != null
-        ? [
-            _previousRecord!['osu_json'],
-            _previousRecord!['taiko_json'],
-            _previousRecord!['fruits_json'],
-            _previousRecord!['mania_json'],
-          ]
-        : [null, null, null, null];
-    final prevModeData = prevModeJsons.map((e) => _decodeModeJson(e as String?)).toList();
-
     return Scaffold(
       appBar: AppBar(
         title: Text(username),
@@ -80,19 +69,19 @@ class _HistoryDetailPageState extends State<HistoryDetailPage>
           controller: _tabController,
           tabs: const [
             Tab(
-              icon: ImageIcon(AssetImage('assets/Rulesets/RulesetOsu.png')),
+              icon: ImageIcon(AssetImage('assets/Rulesets/RulesetOsu.png'), size: 24),
               text: 'osu!',
             ),
             Tab(
-              icon: ImageIcon(AssetImage('assets/Rulesets/RulesetTaiko.png')),
+              icon: ImageIcon(AssetImage('assets/Rulesets/RulesetTaiko.png'), size: 24),
               text: 'osu!taiko',
             ),
             Tab(
-              icon: ImageIcon(AssetImage('assets/Rulesets/RulesetCatch.png')),
+              icon: ImageIcon(AssetImage('assets/Rulesets/RulesetCatch.png'), size: 24),
               text: 'osu!catch',
             ),
             Tab(
-              icon: ImageIcon(AssetImage('assets/Rulesets/RulesetMania.png')),
+              icon: ImageIcon(AssetImage('assets/Rulesets/RulesetMania.png'), size: 24),
               text: 'osu!mania',
             ),
           ],
@@ -102,10 +91,33 @@ class _HistoryDetailPageState extends State<HistoryDetailPage>
         controller: _tabController,
         children: List.generate(4, (tabIndex) {
           final data = modeData[tabIndex];
-          final prevData = prevModeData[tabIndex];
           if (data == null) {
             return const Center(child: Text('暂无数据'));
           }
+
+          Map<String, dynamic>? prevData;
+          final modeKeys = ['osu_json', 'taiko_json', 'fruits_json', 'mania_json'];
+          final modeKey = modeKeys[tabIndex];
+
+          // Find the current record's index in history list
+          int currentRecordIndex = _userHistory.indexWhere((r) => r['id'] == widget.user['id']);
+          if (currentRecordIndex != -1) {
+            // Search backward starting from the next older record (index > currentRecordIndex)
+            for (int i = currentRecordIndex + 1; i < _userHistory.length; i++) {
+              final record = _userHistory[i];
+              final jsonStr = record[modeKey] as String?;
+              if (jsonStr != null && jsonStr.isNotEmpty) {
+                try {
+                  final histData = jsonDecode(jsonStr) as Map<String, dynamic>;
+                  if (areStatsDifferent(data, histData)) {
+                    prevData = histData;
+                    break;
+                  }
+                } catch (_) {}
+              }
+            }
+          }
+
           final items = buildStatsItems(data, prevData);
           return ListView.builder(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

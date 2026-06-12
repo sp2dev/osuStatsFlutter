@@ -1,15 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 String formatNum(dynamic val) {
   if (val == null) return '-';
   final str = val is int ? val.toString() : val.toString();
   if (str.isEmpty) return '-';
+  
+  final hasSign = str.startsWith('-') || str.startsWith('+');
+  final sign = hasSign ? str[0] : '';
+  final digits = hasSign ? str.substring(1) : str;
+  
   final buffer = StringBuffer();
-  for (int i = 0; i < str.length; i++) {
-    if (i > 0 && (str.length - i) % 3 == 0) buffer.write(',');
-    buffer.write(str[i]);
+  for (int i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) buffer.write(',');
+    buffer.write(digits[i]);
   }
-  return buffer.toString();
+  return '$sign$buffer';
 }
 
 String formatDuration(int seconds) {
@@ -79,7 +85,7 @@ List<Map<String, dynamic>> buildStatsItems(Map<String, dynamic> data, [Map<Strin
     {
       'label': 'pp',
       'value': stats['pp'] != null ? stats['pp'].toString() : '-',
-      'icon': const ImageIcon(AssetImage('assets/osulogo.png'), size: 36),
+      'icon': const ImageIcon(AssetImage('assets/osulogo.png')),
       'difference': _getDiffInfo(stats['pp'] as num?, prevStats?['pp'] as num?),
     },
     {
@@ -96,20 +102,20 @@ List<Map<String, dynamic>> buildStatsItems(Map<String, dynamic> data, [Map<Strin
           ? '#${formatNum(stats['country_rank'])}'
           : '-',
       'icon': country != null
-          ? Image.asset('assets/Flags/$country.png', width: 36)
+          ? Image.asset('assets/Flags/$country.png', width: 28, height: 28, fit: BoxFit.contain)
           : Icons.flag,
       'difference': _getDiffInfo(stats['country_rank'] as num?, prevStats?['country_rank'] as num?, lowerIsBetter: true),
     },
     {
       'label': '准确率',
       'value': accuracyStr,
-      'icon': const ImageIcon(AssetImage('assets/accuracy.png'), size: 36),
+      'icon': const ImageIcon(AssetImage('assets/accuracy.png')),
       'difference': _getDiffInfo(stats['accuracy'] as num?, prevStats?['accuracy'] as num?, isPercent: true),
     },
     {
       'label': '总命中次数',
       'value': formatNum(stats['total_hits']),
-      'icon': const ImageIcon(AssetImage('assets/hits.png'), size: 36),
+      'icon': const ImageIcon(AssetImage('assets/hits.png')),
       'difference': _getDiffInfo(stats['total_hits'] as num?, prevStats?['total_hits'] as num?),
     },
     {
@@ -137,4 +143,87 @@ List<Map<String, dynamic>> buildStatsItems(Map<String, dynamic> data, [Map<Strin
       'difference': _getDiffInfo(stats['play_time'] as num?, prevStats?['play_time'] as num?, isTime: true),
     },
   ];
+}
+
+bool areStatsDifferent(Map<String, dynamic>? data1, Map<String, dynamic>? data2) {
+  if (data1 == null && data2 == null) return false;
+  if (data1 == null || data2 == null) return true;
+  final stats1 = data1['statistics'] as Map<String, dynamic>? ?? {};
+  final stats2 = data2['statistics'] as Map<String, dynamic>? ?? {};
+
+  final fields = ['pp', 'global_rank', 'country_rank', 'accuracy', 'total_hits', 'ranked_score', 'total_score', 'play_count', 'play_time'];
+  for (final field in fields) {
+    if (stats1[field] != stats2[field]) return true;
+  }
+  return false;
+}
+
+enum AppThemeMode { system, light, dark }
+
+class ThemeSettings {
+  final AppThemeMode themeMode;
+  final Color seedColor;
+  final bool useDynamicColor;
+
+  ThemeSettings({
+    required this.themeMode,
+    required this.seedColor,
+    required this.useDynamicColor,
+  });
+
+  ThemeSettings copyWith({
+    AppThemeMode? themeMode,
+    Color? seedColor,
+    bool? useDynamicColor,
+  }) {
+    return ThemeSettings(
+      themeMode: themeMode ?? this.themeMode,
+      seedColor: seedColor ?? this.seedColor,
+      useDynamicColor: useDynamicColor ?? this.useDynamicColor,
+    );
+  }
+}
+
+final themeSettingsNotifier = ValueNotifier<ThemeSettings>(
+  ThemeSettings(
+    themeMode: AppThemeMode.system,
+    seedColor: const Color(0xFFFF66AA),
+    useDynamicColor: false,
+  ),
+);
+
+// Predefined colors for settings
+const List<Map<String, dynamic>> predefinedColors = [
+  {'name': 'osu! 粉', 'color': Color(0xFFFF66AA)},
+  {'name': '晴空蓝', 'color': Color(0xFF3498DB)},
+  {'name': '翡翠绿', 'color': Color(0xFF2ECC71)},
+  {'name': '落日橙', 'color': Color(0xFFE67E22)},
+  {'name': '深邃紫', 'color': Color(0xFF9B59B6)},
+  {'name': '烈焰红', 'color': Color(0xFFE74C3C)},
+];
+
+
+void updateThemeSettings({
+  AppThemeMode? themeMode,
+  Color? seedColor,
+  bool? useDynamicColor,
+}) async {
+  final current = themeSettingsNotifier.value;
+  final updated = current.copyWith(
+    themeMode: themeMode,
+    seedColor: seedColor,
+    useDynamicColor: useDynamicColor,
+  );
+  themeSettingsNotifier.value = updated;
+
+  final prefs = await SharedPreferences.getInstance();
+  if (themeMode != null) {
+    await prefs.setInt('theme_mode_pref', themeMode.index);
+  }
+  if (seedColor != null) {
+    await prefs.setInt('theme_color_pref', seedColor.toARGB32());
+  }
+  if (useDynamicColor != null) {
+    await prefs.setBool('use_dynamic_color_pref', useDynamicColor);
+  }
 }
