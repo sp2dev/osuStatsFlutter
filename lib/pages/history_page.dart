@@ -294,10 +294,19 @@ class _HistoryPageState extends State<HistoryPage> {
                       _db.deleteRecord(user['id'] as int);
                       _loadUsers();
                     },
-                    child: Material(
-                      color: Theme.of(context).colorScheme.surface,
+                    child: Card(
                       elevation: 0,
-                      borderRadius: BorderRadius.circular(18),
+                      color: Theme.of(context).colorScheme.surfaceContainerLow,
+                      margin: EdgeInsets.zero,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                        side: BorderSide(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .outlineVariant
+                              .withValues(alpha: 0.3),
+                        ),
+                      ),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(18),
                         onTap: () async {
@@ -309,17 +318,8 @@ class _HistoryPageState extends State<HistoryPage> {
                           );
                           _loadUsers();
                         },
-                        child: Container(
+                        child: Padding(
                           padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .outlineVariant
-                                  .withValues(alpha: 0.5),
-                            ),
-                          ),
                           child: Row(
                             children: [
                               CircleAvatar(

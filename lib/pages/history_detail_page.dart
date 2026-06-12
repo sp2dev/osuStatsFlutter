@@ -108,36 +108,98 @@ class _HistoryDetailPageState extends State<HistoryDetailPage>
           }
           final items = buildStatsItems(data, prevData);
           return ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             itemCount: items.length,
             itemBuilder: (context, index) {
               final item = items[index];
-              return ListTile(
-                leading: () {
-                  final icon = item['icon'];
-                  if (icon is Widget) return icon;
-                  return Icon(icon as IconData, size: 36);
-                }(),
-                title: Text(item['label'] as String,
-                    style: const TextStyle(fontSize: 15)),
-                subtitle: Text(item['value'] as String,
-                    style: const TextStyle(fontSize: 25)),
-                trailing: () {
-                  final diff = item['difference'];
-                  if (diff != null) {
-                    final diffText = diff['text'] as String;
-                    final isPositive = diff['isPositive'] as bool;
-                    return Text(
-                      diffText,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: isPositive ? Colors.green : Colors.red,
+              return Card(
+                elevation: 0,
+                color: Theme.of(context).colorScheme.surfaceContainerLow,
+                margin: const EdgeInsets.only(bottom: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(
+                    color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: IconTheme(
+                          data: IconThemeData(
+                            color: Theme.of(context).colorScheme.primary,
+                            size: 28,
+                          ),
+                          child: () {
+                            final icon = item['icon'];
+                            if (icon is Widget) return icon;
+                            return Icon(icon as IconData);
+                          }(),
+                        ),
                       ),
-                    );
-                  }
-                  return null;
-                }(),
-                onTap: () {},
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item['label'] as String,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              item['value'] as String,
+                              style: TextStyle(
+                                fontSize: 20,
+                                color: Theme.of(context).colorScheme.onSurface,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      () {
+                        final diff = item['difference'];
+                        if (diff != null) {
+                          final diffText = diff['text'] as String;
+                          final isPositive = diff['isPositive'] as bool;
+                          final baseColor = isPositive ? Colors.green : Colors.red;
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: baseColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: baseColor.withValues(alpha: 0.3),
+                                width: 1,
+                              ),
+                            ),
+                            child: Text(
+                              diffText,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: baseColor,
+                              ),
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      }(),
+                    ],
+                  ),
+                ),
               );
             },
           );

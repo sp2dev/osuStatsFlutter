@@ -20,6 +20,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
 
   final List<Map<String, dynamic>?> _modeData = [null, null, null, null];
   Map<String, dynamic>? _previousRecord;
+  List<String> _userList = [];
   bool _isLoading = true;
   String? _error;
   String? _targetUser;
@@ -32,13 +33,20 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
   }
 
   Future<void> _loadAllData() async {
+    final db = DatabaseService();
+    final users = await db.getAllUsers();
+    final uniqueNames = users.map((u) => u['username'] as String).toSet().toList()..sort();
+
     final prefs = await SharedPreferences.getInstance();
     final username = prefs.getString('query_username');
     if (username == null || username.isEmpty) {
       setState(() {
         _targetUser = null;
+        _userList = uniqueNames;
         _isLoading = false;
-        _error = '请先到"设置"页面输入用户名再查询';
+        _error = uniqueNames.isNotEmpty
+            ? '请在顶部选择用户或先到"设置"页面输入用户名'
+            : '请先到"设置"页面输入用户名再查询';
       });
       return;
     }
@@ -76,11 +84,19 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
       }
     }
 
+    // Refresh user list in case a new user was queried
+    final updatedUsers = await db.getAllUsers();
+    final updatedNames = updatedUsers.map((u) => u['username'] as String).toSet().toList()..sort();
+    if (!updatedNames.contains(username)) {
+      updatedNames.insert(0, username);
+    }
+
     setState(() {
       for (int i = 0; i < results.length; i++) {
         _modeData[i] = results[i];
       }
       _previousRecord = latestRecord;
+      _userList = updatedNames;
       _isLoading = false;
     });
 
@@ -134,9 +150,53 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
+    final hasUsers = _userList.isNotEmpty;
     return Scaffold(
       appBar: AppBar(
-        title: Text(_targetUser != null ? _targetUser! : '主页面'),
+        centerTitle: true,
+        title: !hasUsers
+            ? Text(_targetUser ?? '主页面')
+            : Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+                  ),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _targetUser != null && _userList.contains(_targetUser)
+                        ? _targetUser
+                        : (_userList.isNotEmpty ? _userList.first : null),
+                    icon: Icon(
+                      Icons.arrow_drop_down,
+                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    ),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    dropdownColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(16),
+                    onChanged: (String? newValue) async {
+                      if (newValue != null && newValue != _targetUser) {
+                        final prefs = await SharedPreferences.getInstance();
+                        await prefs.setString('query_username', newValue);
+                        _loadAllData();
+                      }
+                    },
+                    items: _userList.map<DropdownMenuItem<String>>((String value) {
+                      return DropdownMenuItem<String>(
+                        value: value,
+                        child: Text(value),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
@@ -176,19 +236,40 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
 
     if (_error != null) {
       return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Text(_error!, textAlign: TextAlign.center),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: _loadAllData,
-              child: const Text('重试'),
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.4),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.error_outline,
+                  size: 48,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                onPressed: _loadAllData,
+                icon: const Icon(Icons.refresh),
+                label: const Text('重试'),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -214,34 +295,98 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
         return RefreshIndicator(
           onRefresh: _loadAllData,
           child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             itemCount: items.length,
             itemBuilder: (context, index) {
               final item = items[index];
-              return ListTile(
-                leading: () {
-                  final icon = item['icon'];
-                  if (icon is Widget) return icon;
-                  return Icon(icon as IconData, size: 36);
-                }(),
-                title: Text(item['label'] as String, style: TextStyle(fontSize: 15),),
-                subtitle: Text(item['value'] as String, style: TextStyle(fontSize: 25),),
-                trailing: () {
-                  final diff = item['difference'];
-                  if (diff != null) {
-                    final diffText = diff['text'] as String;
-                    final isPositive = diff['isPositive'] as bool;
-                    return Text(
-                      diffText,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: isPositive ? Colors.green : Colors.red,
+              return Card(
+                elevation: 0,
+                color: Theme.of(context).colorScheme.surfaceContainerLow,
+                margin: const EdgeInsets.only(bottom: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(
+                    color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: IconTheme(
+                          data: IconThemeData(
+                            color: Theme.of(context).colorScheme.primary,
+                            size: 28,
+                          ),
+                          child: () {
+                            final icon = item['icon'];
+                            if (icon is Widget) return icon;
+                            return Icon(icon as IconData);
+                          }(),
+                        ),
                       ),
-                    );
-                  }
-                  return null;
-                }(),
-                onTap: () {},
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item['label'] as String,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              item['value'] as String,
+                              style: TextStyle(
+                                fontSize: 20,
+                                color: Theme.of(context).colorScheme.onSurface,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      () {
+                        final diff = item['difference'];
+                        if (diff != null) {
+                          final diffText = diff['text'] as String;
+                          final isPositive = diff['isPositive'] as bool;
+                          final baseColor = isPositive ? Colors.green : Colors.red;
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: baseColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: baseColor.withValues(alpha: 0.3),
+                                width: 1,
+                              ),
+                            ),
+                            child: Text(
+                              diffText,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: baseColor,
+                              ),
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      }(),
+                    ],
+                  ),
+                ),
               );
             },
           ),
