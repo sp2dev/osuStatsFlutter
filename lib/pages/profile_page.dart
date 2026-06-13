@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/osu_api_service.dart';
 import '../utils.dart';
 
@@ -133,6 +134,21 @@ class _ProfilePageState extends State<ProfilePage> {
                           fontSize: 13,
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
+                      ),
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          final Uri url = Uri.parse('https://osu.ppy.sh/home/account/edit#oauth');
+                          if (!await launchUrl(url)) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('无法打开链接')),
+                              );
+                            }
+                          }
+                        },
+                        icon: const Icon(Icons.open_in_new, size: 18),
+                        label: const Text('前往 osu! 官网获取'),
                       ),
                       const SizedBox(height: 20),
                       TextField(
