@@ -412,6 +412,86 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
               const SizedBox(height: 16),
+              // Compare Target Settings Card
+              ValueListenableBuilder<CompareTarget>(
+                valueListenable: compareTargetNotifier,
+                builder: (context, compareTarget, _) {
+                  return Card(
+                    elevation: 0,
+                    color: Theme.of(context).colorScheme.surfaceContainerLow,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      side: BorderSide(
+                        color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(20.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.compare_arrows, color: Theme.of(context).colorScheme.primary),
+                              const SizedBox(width: 8),
+                              Text(
+                                '对比数据源设置',
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            "选择主页数据对比的基础。不同的选项会与不同时间点的数据进行比较，显示增长或减少。",
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Column(
+                            children: [
+                              RadioListTile<CompareTarget>(
+                                title: const Text('上次查询的数据'),
+                                subtitle: const Text('与上一次成功获取的差异数据进行对比'),
+                                value: CompareTarget.lastQuery,
+                                groupValue: compareTarget,
+                                onChanged: (value) {
+                                  if (value != null) updateCompareTarget(value);
+                                },
+                                contentPadding: EdgeInsets.zero,
+                              ),
+                              RadioListTile<CompareTarget>(
+                                title: const Text('今日最早的数据'),
+                                subtitle: const Text('与今天零点后第一次查询的数据对比'),
+                                value: CompareTarget.todayEarliest,
+                                groupValue: compareTarget,
+                                onChanged: (value) {
+                                  if (value != null) updateCompareTarget(value);
+                                },
+                                contentPadding: EdgeInsets.zero,
+                              ),
+                              RadioListTile<CompareTarget>(
+                                title: const Text('昨日最晚的数据'),
+                                subtitle: const Text('与昨天最后一次查询的数据对比'),
+                                value: CompareTarget.yesterdayLatest,
+                                groupValue: compareTarget,
+                                onChanged: (value) {
+                                  if (value != null) updateCompareTarget(value);
+                                },
+                                contentPadding: EdgeInsets.zero,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
               // OAuth Card
             ],
           ),

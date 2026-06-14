@@ -276,31 +276,74 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
       );
     }
 
-    return TabBarView(
-      controller: _tabController,
-      children: List.generate(4, (tabIndex) {
-        final data = _modeData[tabIndex];
-        if (data == null) {
-          return const Center(child: Text('暂无数据'));
-        }
-        Map<String, dynamic>? prevData;
-        final modeKeys = ['osu_json', 'taiko_json', 'fruits_json', 'mania_json'];
-        final modeKey = modeKeys[tabIndex];
-        
-        // Find the first record in history where stats for this mode are different from current data
-        for (final record in _userHistory) {
-          final jsonStr = record[modeKey] as String?;
-          if (jsonStr != null && jsonStr.isNotEmpty) {
-            try {
-              final histData = jsonDecode(jsonStr) as Map<String, dynamic>;
-              if (areStatsDifferent(data, histData)) {
-                prevData = histData;
-                break;
+    return ValueListenableBuilder<CompareTarget>(
+      valueListenable: compareTargetNotifier,
+      builder: (context, compareTarget, _) {
+        return TabBarView(
+          controller: _tabController,
+          children: List.generate(4, (tabIndex) {
+            final data = _modeData[tabIndex];
+            if (data == null) {
+              return const Center(child: Text('暂无数据'));
+            }
+            Map<String, dynamic>? prevData;
+            final modeKeys = ['osu_json', 'taiko_json', 'fruits_json', 'mania_json'];
+            final modeKey = modeKeys[tabIndex];
+            
+            final now = DateTime.now();
+            final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+
+            Map<String, dynamic>? findLastQuery() {
+              for (final record in _userHistory) {
+                final jsonStr = record[modeKey] as String?;
+                if (jsonStr != null && jsonStr.isNotEmpty) {
+                  try {
+                    final histData = jsonDecode(jsonStr) as Map<String, dynamic>;
+                    if (areStatsDifferent(data, histData)) {
+                      return histData;
+                    }
+                  } catch (_) {}
+                }
               }
-            } catch (_) {}
-          }
-        }
-        final items = buildStatsItems(data, prevData);
+              return null;
+            }
+
+            if (compareTarget == CompareTarget.lastQuery) {
+              prevData = findLastQuery();
+            } else if (compareTarget == CompareTarget.todayEarliest) {
+              Map<String, dynamic>? earliestToday;
+              for (final record in _userHistory) {
+                final updatedAt = record['updated_at'] as int;
+                if (updatedAt >= todayStart) {
+                  final jsonStr = record[modeKey] as String?;
+                  if (jsonStr != null && jsonStr.isNotEmpty) {
+                    try {
+                      earliestToday = jsonDecode(jsonStr) as Map<String, dynamic>;
+                    } catch (_) {}
+                  }
+                } else {
+                  break;
+                }
+              }
+              prevData = earliestToday ?? findLastQuery();
+            } else if (compareTarget == CompareTarget.yesterdayLatest) {
+              Map<String, dynamic>? latestYesterday;
+              for (final record in _userHistory) {
+                final updatedAt = record['updated_at'] as int;
+                if (updatedAt < todayStart) {
+                  final jsonStr = record[modeKey] as String?;
+                  if (jsonStr != null && jsonStr.isNotEmpty) {
+                    try {
+                      latestYesterday = jsonDecode(jsonStr) as Map<String, dynamic>;
+                      break;
+                    } catch (_) {}
+                  }
+                }
+              }
+              prevData = latestYesterday ?? findLastQuery();
+            }
+
+            final items = buildStatsItems(data, prevData);
         return RefreshIndicator(
           onRefresh: _loadAllData,
           child: ListView.builder(
@@ -401,6 +444,8 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
           ),
         );
       }),
+    );
+      },
     );
   }
 }

@@ -28,6 +28,9 @@ void main() async {
     useDynamicColor: useDynamic,
   );
 
+  final compareTargetIndex = prefs.getInt('compare_target_pref') ?? CompareTarget.lastQuery.index;
+  compareTargetNotifier.value = CompareTarget.values[compareTargetIndex];
+
   runApp(const MyApp());
 }
 
