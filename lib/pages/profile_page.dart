@@ -444,7 +444,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            "选择主页数据对比的基础。不同的选项会与不同时间点的数据进行比较，显示增长或减少。",
+                            "选择主页数据对比的基础。不同的选项会与不同时间点的数据进行比较。",
                             style: TextStyle(
                               fontSize: 13,
                               color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -460,19 +460,16 @@ class _ProfilePageState extends State<ProfilePage> {
                               children: [
                                 RadioListTile<CompareTarget>(
                                   title: const Text('上次查询的数据'),
-                                  subtitle: const Text('与上一次成功获取的差异数据进行对比'),
                                   value: CompareTarget.lastQuery,
                                   contentPadding: EdgeInsets.zero,
                                 ),
                                 RadioListTile<CompareTarget>(
                                   title: const Text('今日最早的数据'),
-                                  subtitle: const Text('与今天零点后第一次查询的数据对比'),
                                   value: CompareTarget.todayEarliest,
                                   contentPadding: EdgeInsets.zero,
                                 ),
                                 RadioListTile<CompareTarget>(
-                                  title: const Text('昨日最晚的数据'),
-                                  subtitle: const Text('与昨天最后一次查询的数据对比'),
+                                  title: const Text('昨日最后的数据'),
                                   value: CompareTarget.yesterdayLatest,
                                   contentPadding: EdgeInsets.zero,
                                 ),

@@ -318,12 +318,23 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
                   final jsonStr = record[modeKey] as String?;
                   if (jsonStr != null && jsonStr.isNotEmpty) {
                     try {
-                      earliestToday = jsonDecode(jsonStr) as Map<String, dynamic>;
+                      final histData = jsonDecode(jsonStr) as Map<String, dynamic>;
+                      if (areStatsDifferent(data, histData)) {
+                        earliestToday = histData;
+                      } else {
+                        // If it's identical, we keep looking further back in today's records
+                        // (though earliest will just overwrite). But actually we want the
+                        // absolute earliest today. So we should just update earliestToday.
+                        earliestToday = histData;
+                      }
                     } catch (_) {}
                   }
                 } else {
                   break;
                 }
+              }
+              if (earliestToday != null && !areStatsDifferent(data, earliestToday)) {
+                earliestToday = null;
               }
               prevData = earliestToday ?? findLastQuery();
             } else if (compareTarget == CompareTarget.yesterdayLatest) {
@@ -339,6 +350,9 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
                     } catch (_) {}
                   }
                 }
+              }
+              if (latestYesterday != null && !areStatsDifferent(data, latestYesterday)) {
+                latestYesterday = null;
               }
               prevData = latestYesterday ?? findLastQuery();
             }
