@@ -227,3 +227,17 @@ void updateThemeSettings({
     await prefs.setBool('use_dynamic_color_pref', useDynamicColor);
   }
 }
+
+enum CompareTarget {
+  lastQuery,
+  todayEarliest,
+  yesterdayLatest,
+}
+
+final compareTargetNotifier = ValueNotifier<CompareTarget>(CompareTarget.lastQuery);
+
+void updateCompareTarget(CompareTarget target) async {
+  compareTargetNotifier.value = target;
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setInt('compare_target_pref', target.index);
+}
