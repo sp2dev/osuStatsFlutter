@@ -17,6 +17,7 @@ class _ProfilePageState extends State<ProfilePage> {
   final _usernameController = TextEditingController();
   bool _savingCredentials = false;
   bool _savingUsername = false;
+  bool _credentialsExpanded = false;
 
   @override
   void initState() {
@@ -26,12 +27,17 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _loadSaved() async {
     final prefs = await SharedPreferences.getInstance();
+    final hasSavedCredentials =
+        prefs.containsKey('client_id') || prefs.containsKey('client_secret');
     _clientIdController.text =
         prefs.getString('client_id') ?? OsuApiService.defaultClientId;
     _clientSecretController.text =
         prefs.getString('client_secret') ?? OsuApiService.defaultClientSecret;
     _usernameController.text = prefs.getString('query_username') ?? '';
-    setState(() {});
+    if (!mounted) return;
+    setState(() {
+      _credentialsExpanded = !hasSavedCredentials;
+    });
   }
 
   Future<void> _saveCredentials() async {
@@ -41,6 +47,9 @@ class _ProfilePageState extends State<ProfilePage> {
       await prefs.setString('client_id', _clientIdController.text);
       await prefs.setString('client_secret', _clientSecretController.text);
       if (!mounted) return;
+      setState(() {
+        _credentialsExpanded = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('客户端 ID 和密钥已保存')),
       );
@@ -101,7 +110,7 @@ class _ProfilePageState extends State<ProfilePage> {
           body: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
             children: [
-                            Card(
+              Card(
                 elevation: 0,
                 color: Theme.of(context).colorScheme.surfaceContainerLow,
                 shape: RoundedRectangleBorder(
@@ -110,97 +119,101 @@ class _ProfilePageState extends State<ProfilePage> {
                     color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.3),
                   ),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                child: ExpansionTile(
+                  initiallyExpanded: _credentialsExpanded,
+                  onExpansionChanged: (expanded) {
+                    setState(() => _credentialsExpanded = expanded);
+                  },
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                  leading: Icon(Icons.key, color: Theme.of(context).colorScheme.primary),
+                  title: Text(
+                    'API 凭据设置',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.key, color: Theme.of(context).colorScheme.primary),
-                          const SizedBox(width: 8),
                           Text(
-                            'API 凭据设置',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
+                            "请前往 osu! 官网获取自己的 OAuth 客户端 ID 和密钥，并在下方配置以便正常获取 API 数据。",
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          OutlinedButton.icon(
+                            onPressed: () async {
+                              final Uri url = Uri.parse('https://osu.ppy.sh/home/account/edit#oauth');
+                              if (!await launchUrl(url)) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('无法打开链接')),
+                                  );
+                                }
+                              }
+                            },
+                            icon: const Icon(Icons.open_in_new, size: 18),
+                            label: const Text('前往 osu! 官网获取'),
+                          ),
+                          const SizedBox(height: 20),
+                          TextField(
+                            controller: _clientIdController,
+                            decoration: InputDecoration(
+                              labelText: '客户端 ID',
+                              hintText: '输入 OAuth 客户端 ID',
+                              prefixIcon: const Icon(Icons.badge),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: _clientSecretController,
+                            decoration: InputDecoration(
+                              labelText: '客户端密钥',
+                              hintText: '输入 OAuth 客户端密钥',
+                              prefixIcon: const Icon(Icons.lock),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            obscureText: true,
+                          ),
+                          const SizedBox(height: 20),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 48,
+                            child: FilledButton.icon(
+                              onPressed: _savingCredentials ? null : _saveCredentials,
+                              icon: _savingCredentials
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.5,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Icon(Icons.save),
+                              label: Text(_savingCredentials ? '保存中...' : '保存凭据'),
+                              style: FilledButton.styleFrom(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        "请前往 osu! 官网获取自己的 OAuth 客户端 ID 和密钥，并在下方配置以便正常获取 API 数据。",
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      OutlinedButton.icon(
-                        onPressed: () async {
-                          final Uri url = Uri.parse('https://osu.ppy.sh/home/account/edit#oauth');
-                          if (!await launchUrl(url)) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('无法打开链接')),
-                              );
-                            }
-                          }
-                        },
-                        icon: const Icon(Icons.open_in_new, size: 18),
-                        label: const Text('前往 osu! 官网获取'),
-                      ),
-                      const SizedBox(height: 20),
-                      TextField(
-                        controller: _clientIdController,
-                        decoration: InputDecoration(
-                          labelText: '客户端 ID',
-                          hintText: '输入 OAuth 客户端 ID',
-                          prefixIcon: const Icon(Icons.badge),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _clientSecretController,
-                        decoration: InputDecoration(
-                          labelText: '客户端密钥',
-                          hintText: '输入 OAuth 客户端密钥',
-                          prefixIcon: const Icon(Icons.lock),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        obscureText: true,
-                      ),
-                      const SizedBox(height: 20),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: FilledButton.icon(
-                          onPressed: _savingCredentials ? null : _saveCredentials,
-                          icon: _savingCredentials
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2.5,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Icon(Icons.save),
-                          label: Text(_savingCredentials ? '保存中...' : '保存凭据'),
-                          style: FilledButton.styleFrom(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 16),
@@ -451,29 +464,53 @@ class _ProfilePageState extends State<ProfilePage> {
                             ),
                           ),
                           const SizedBox(height: 16),
-                          RadioGroup<CompareTarget>(
-                            groupValue: compareTarget,
-                            onChanged: (value) {
-                              if (value != null) updateCompareTarget(value);
-                            },
-                            child: Column(
-                              children: [
-                                RadioListTile<CompareTarget>(
-                                  title: const Text('上次查询的数据'),
-                                  value: CompareTarget.lastQuery,
-                                  contentPadding: EdgeInsets.zero,
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .primaryContainer
+                                  .withValues(alpha: 0.4),
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .primary
+                                    .withValues(alpha: 0.2),
+                              ),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<CompareTarget>(
+                                value: compareTarget,
+                                icon: Icon(
+                                  Icons.arrow_drop_down,
+                                  color: Theme.of(context).colorScheme.onPrimaryContainer,
                                 ),
-                                RadioListTile<CompareTarget>(
-                                  title: const Text('今日最早的数据'),
-                                  value: CompareTarget.todayEarliest,
-                                  contentPadding: EdgeInsets.zero,
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
                                 ),
-                                RadioListTile<CompareTarget>(
-                                  title: const Text('昨日最后的数据'),
-                                  value: CompareTarget.yesterdayLatest,
-                                  contentPadding: EdgeInsets.zero,
-                                ),
-                              ],
+                                dropdownColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(16),
+                                onChanged: (value) {
+                                  if (value != null) updateCompareTarget(value);
+                                },
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: CompareTarget.lastQuery,
+                                    child: Text('上次查询的数据'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: CompareTarget.todayEarliest,
+                                    child: Text('今日最早的数据'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: CompareTarget.yesterdayLatest,
+                                    child: Text('昨日最后的数据'),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ],
