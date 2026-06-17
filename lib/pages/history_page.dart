@@ -197,29 +197,52 @@ class _HistoryPageState extends State<HistoryPage> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    child: DropdownButtonFormField<String?>(
-                      initialValue: _selectedUsername,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: '筛选玩家',
-                        border: InputBorder.none,
-                        prefixIcon: Icon(Icons.filter_list),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primaryContainer
+                            .withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withValues(alpha: 0.2),
+                        ),
                       ),
-                      items: [
-                        const DropdownMenuItem<String?>(
-                          value: null,
-                          child: Text('全部玩家'),
-                        ),
-                        ..._uniqueUsernames.map(
-                          (name) => DropdownMenuItem<String?>(
-                            value: name,
-                            child: Text(name),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String?>(
+                          value: _selectedUsername,
+                          icon: Icon(
+                            Icons.arrow_drop_down,
+                            color: Theme.of(context).colorScheme.onPrimaryContainer,
                           ),
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onPrimaryContainer,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          dropdownColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(16),
+                          onChanged: (String? newValue) {
+                            setState(() => _selectedUsername = newValue);
+                          },
+                          items: [
+                            const DropdownMenuItem<String?>(
+                              value: null,
+                              child: Text('全部玩家'),
+                            ),
+                            ..._uniqueUsernames.map(
+                              (name) => DropdownMenuItem<String?>(
+                                value: name,
+                                child: Text(name),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                      onChanged: (value) {
-                        setState(() => _selectedUsername = value);
-                      },
+                      ),
                     ),
                   ),
                 ),
