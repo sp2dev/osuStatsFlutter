@@ -84,12 +84,14 @@ List<Map<String, dynamic>> buildStatsItems(Map<String, dynamic> data, [Map<Strin
   return [
     {
       'label': 'pp',
+      'fieldKey': 'pp',
       'value': stats['pp'] != null ? stats['pp'].toString() : '-',
       'icon': const ImageIcon(AssetImage('assets/osulogo.png')),
       'difference': _getDiffInfo(stats['pp'] as num?, prevStats?['pp'] as num?),
     },
     {
       'label': '总排名',
+      'fieldKey': 'global_rank',
       'value': stats['global_rank'] != null
           ? '#${formatNum(stats['global_rank'])}'
           : '-',
@@ -98,6 +100,7 @@ List<Map<String, dynamic>> buildStatsItems(Map<String, dynamic> data, [Map<Strin
     },
     {
       'label': '地区排名',
+      'fieldKey': 'country_rank',
       'value': stats['country_rank'] != null
           ? '#${formatNum(stats['country_rank'])}'
           : '-',
@@ -108,36 +111,42 @@ List<Map<String, dynamic>> buildStatsItems(Map<String, dynamic> data, [Map<Strin
     },
     {
       'label': '准确率',
+      'fieldKey': 'accuracy',
       'value': accuracyStr,
       'icon': const ImageIcon(AssetImage('assets/accuracy.png')),
       'difference': _getDiffInfo(stats['accuracy'] as num?, prevStats?['accuracy'] as num?, isPercent: true),
     },
     {
       'label': '总命中次数',
+      'fieldKey': 'total_hits',
       'value': formatNum(stats['total_hits']),
       'icon': const ImageIcon(AssetImage('assets/hits.png')),
       'difference': _getDiffInfo(stats['total_hits'] as num?, prevStats?['total_hits'] as num?),
     },
     {
       'label': '计分成绩总分',
+      'fieldKey': 'ranked_score',
       'value': formatNum(stats['ranked_score']),
       'icon': Icons.emoji_events,
       'difference': _getDiffInfo(stats['ranked_score'] as num?, prevStats?['ranked_score'] as num?),
     },
     {
       'label': '总分数',
+      'fieldKey': 'total_score',
       'value': formatNum(stats['total_score']),
       'icon': Icons.scoreboard,
       'difference': _getDiffInfo(stats['total_score'] as num?, prevStats?['total_score'] as num?),
     },
     {
       'label': '游玩次数',
+      'fieldKey': 'play_count',
       'value': formatNum(stats['play_count']),
       'icon': Icons.play_circle,
       'difference': _getDiffInfo(stats['play_count'] as num?, prevStats?['play_count'] as num?),
     },
     {
       'label': '游玩时间',
+      'fieldKey': 'play_time',
       'value': formatDuration(playtime),
       'icon': Icons.timer,
       'difference': _getDiffInfo(stats['play_time'] as num?, prevStats?['play_time'] as num?, isTime: true),

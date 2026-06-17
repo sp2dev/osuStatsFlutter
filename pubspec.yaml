@@ -41,6 +41,7 @@ dependencies:
   path: ^1.9.1
   dynamic_color: ^1.8.1
   url_launcher: ^6.3.2
+  fl_chart: ^1.2.0
 
 dev_dependencies:
   flutter_test:
