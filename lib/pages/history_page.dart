@@ -107,16 +107,6 @@ class _HistoryPageState extends State<HistoryPage> {
 
     return Container(
       padding: MediaQuery.of(context).padding,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Theme.of(context).colorScheme.primary.withValues(alpha: 0.06),
-            Theme.of(context).colorScheme.surface,
-          ],
-        ),
-      ),
       child: RefreshIndicator(
         onRefresh: _loadUsers,
         child: ListView.builder(

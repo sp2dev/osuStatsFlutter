@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../services/database_service.dart';
 import '../utils.dart';
+import 'chart_page.dart';
 
 class HistoryDetailPage extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -134,9 +135,26 @@ class _HistoryDetailPageState extends State<HistoryDetailPage>
                     color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.3),
                   ),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Row(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: () {
+                    if (_userHistory.isEmpty) return;
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ChartPage(
+                          username: widget.user['username'] as String,
+                          statLabel: item['label'] as String,
+                          fieldKey: item['fieldKey'] as String,
+                          modeKey: modeKey,
+                          history: _userHistory,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Row(
                     children: [
                       Container(
                         padding: const EdgeInsets.all(8),
@@ -212,7 +230,7 @@ class _HistoryDetailPageState extends State<HistoryDetailPage>
                     ],
                   ),
                 ),
-              );
+              ));
             },
           );
         }),

@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/osu_api_service.dart';
 import '../services/database_service.dart';
 import '../utils.dart';
+import 'chart_page.dart';
 
 class MainPage extends StatefulWidget {
   const MainPage({super.key});
@@ -375,9 +376,26 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
                     color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.3),
                   ),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Row(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: () {
+                    if (_userHistory.isEmpty) return;
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ChartPage(
+                          username: _targetUser ?? '',
+                          statLabel: item['label'] as String,
+                          fieldKey: item['fieldKey'] as String,
+                          modeKey: modeKey,
+                          history: _userHistory,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Row(
                     children: [
                       Container(
                         padding: const EdgeInsets.all(8),
@@ -453,7 +471,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
                     ],
                   ),
                 ),
-              );
+              ));
             },
           ),
         );
