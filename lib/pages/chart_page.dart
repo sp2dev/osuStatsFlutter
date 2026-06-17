@@ -28,17 +28,44 @@ class _ChartPageState extends State<ChartPage> {
   List<DateTime> _times = [];
   double _minY = 0;
   double _maxY = 0;
+  
+  String _selectedRange = '全部';
+  int _customDays = 0;
+  final TextEditingController _customDaysController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _processData();
   }
+  
+  @override
+  void dispose() {
+    _customDaysController.dispose();
+    super.dispose();
+  }
 
   void _processData() {
     List<Map<String, dynamic>> dataPoints = [];
+    int? startTimeMs;
+    final now = DateTime.now();
+
+    if (_selectedRange == '1天') {
+      startTimeMs = now.subtract(const Duration(days: 1)).millisecondsSinceEpoch;
+    } else if (_selectedRange == '7天') {
+      startTimeMs = now.subtract(const Duration(days: 7)).millisecondsSinceEpoch;
+    } else if (_selectedRange == '1个月') {
+      startTimeMs = now.subtract(const Duration(days: 30)).millisecondsSinceEpoch;
+    } else if (_selectedRange == '自定义' && _customDays > 0) {
+      startTimeMs = now.subtract(Duration(days: _customDays)).millisecondsSinceEpoch;
+    }
 
     for (final record in widget.history) {
+      final updatedAt = record['updated_at'] as int;
+      if (startTimeMs != null && updatedAt < startTimeMs) {
+        continue;
+      }
+      
       final jsonStr = record[widget.modeKey] as String?;
       if (jsonStr != null && jsonStr.isNotEmpty) {
         try {
@@ -51,10 +78,12 @@ class _ChartPageState extends State<ChartPage> {
               numValue = numValue * 100;
             } else if (widget.fieldKey == 'play_time') {
               numValue = numValue / 3600.0; // hours
+            } else if (widget.fieldKey == 'global_rank' || widget.fieldKey == 'country_rank') {
+              numValue = -numValue;
             }
 
             dataPoints.add({
-              'time': DateTime.fromMillisecondsSinceEpoch(record['updated_at'] as int),
+              'time': DateTime.fromMillisecondsSinceEpoch(updatedAt),
               'value': numValue.toDouble(),
             });
           }
@@ -64,19 +93,16 @@ class _ChartPageState extends State<ChartPage> {
 
     dataPoints.sort((a, b) => (a['time'] as DateTime).compareTo(b['time'] as DateTime));
 
-    if (dataPoints.isEmpty) return;
+    if (dataPoints.isEmpty) {
+      setState(() {
+        _spots = [];
+        _times = [];
+      });
+      return;
+    }
 
     List<FlSpot> spots = [];
     List<DateTime> times = [];
-    
-    // We can use the index as x-axis, or time since first record
-    // Since records might not be evenly spaced, using time since first record is better
-    // But fl_chart can handle X as timestamp as long as we format it correctly.
-    // However, timestamp can be very large numbers. Better to use index, or hours since first.
-    // Let's use milliseconds since epoch / 1000000 to keep it manageable, 
-    // or just index if there are few points. Wait, using index is simpler, but doesn't reflect time gaps.
-    // Let's use the actual timestamp / (1000 * 60) (minutes since epoch)
-    // Wait, let's just map x to index, and use the times list to get the date for tooltip.
     
     double minY = dataPoints.first['value'];
     double maxY = dataPoints.first['value'];
@@ -108,7 +134,9 @@ class _ChartPageState extends State<ChartPage> {
   }
 
   String _formatY(double value) {
-    if (widget.fieldKey == 'accuracy') {
+    if (widget.fieldKey == 'global_rank' || widget.fieldKey == 'country_rank') {
+      return '#${formatNum(value.abs().toInt())}';
+    } else if (widget.fieldKey == 'accuracy') {
       return '${value.toStringAsFixed(2)}%';
     } else if (widget.fieldKey == 'play_time') {
       return '${value.toStringAsFixed(1)}h';
@@ -121,16 +149,16 @@ class _ChartPageState extends State<ChartPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('${widget.username} 数据的变化情况'),
+        title: Text('${widget.username} 的数据'),
       ),
-      body: _spots.isEmpty
-          ? const Center(child: Text('暂无足够的数据生成图表'))
-          : Padding(
-              padding: const EdgeInsets.only(right: 24, left: 16, top: 24, bottom: 24),
-              child: Column(
-                children: [
-                  Expanded(
-                    child: Column(
+      body: Padding(
+        padding: const EdgeInsets.only(right: 24, left: 16, top: 24, bottom: 24),
+        child: Column(
+          children: [
+            Expanded(
+              child: _spots.isEmpty
+                  ? const Center(child: Text('暂无所选范围内的数据生成图表'))
+                  : Column(
                       children: [
                         Text(
                           widget.statLabel,
@@ -139,102 +167,159 @@ class _ChartPageState extends State<ChartPage> {
                         const SizedBox(height: 24),
                         Expanded(
                           child: LineChart(
-                      LineChartData(
-                        minY: _minY,
-                        maxY: _maxY,
-                        minX: -0.2,
-                        maxX: (_spots.length - 1).toDouble() + 0.2,
-                        lineTouchData: LineTouchData(
-                          touchTooltipData: LineTouchTooltipData(
-                            getTooltipItems: (touchedSpots) {
-                              return touchedSpots.map((LineBarSpot touchedSpot) {
-                                final index = touchedSpot.x.toInt();
-                                if (index < 0 || index >= _times.length) return null;
-                                final time = _times[index];
-                                final timeStr = '${time.month}-${time.day} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-                                return LineTooltipItem(
-                                  '$timeStr\n${_formatY(touchedSpot.y)}',
-                                  const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                );
-                              }).toList();
+                            LineChartData(
+                              minY: _minY,
+                              maxY: _maxY,
+                              minX: -0.2,
+                              maxX: (_spots.length - 1).toDouble() + 0.2,
+                              lineTouchData: LineTouchData(
+                                touchTooltipData: LineTouchTooltipData(
+                                  getTooltipItems: (touchedSpots) {
+                                    return touchedSpots.map((LineBarSpot touchedSpot) {
+                                      final index = touchedSpot.x.toInt();
+                                      if (index < 0 || index >= _times.length) return null;
+                                      final time = _times[index];
+                                      final timeStr = '${time.month}-${time.day} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+                                      return LineTooltipItem(
+                                        '$timeStr\n${_formatY(touchedSpot.y)}',
+                                        const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                      );
+                                    }).toList();
+                                  },
+                                ),
+                              ),
+                              gridData: const FlGridData(show: true, drawVerticalLine: false),
+                              titlesData: FlTitlesData(
+                                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                                bottomTitles: AxisTitles(
+                                  sideTitles: SideTitles(
+                                    showTitles: true,
+                                    reservedSize: 30,
+                                    getTitlesWidget: (value, meta) {
+                                      final index = value.toInt();
+                                      if (index < 0 || index >= _times.length || value != index.toDouble()) {
+                                        return const SizedBox.shrink();
+                                      }
+                                      final time = _times[index];
+                                      return Padding(
+                                        padding: const EdgeInsets.only(top: 8),
+                                        child: Text(
+                                          '${time.month}-${time.day}',
+                                          style: const TextStyle(fontSize: 10),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                                leftTitles: AxisTitles(
+                                  sideTitles: SideTitles(
+                                    showTitles: true,
+                                    reservedSize: 60,
+                                    getTitlesWidget: (value, meta) {
+                                      return Text(
+                                        _formatY(value),
+                                        style: const TextStyle(fontSize: 10),
+                                        textAlign: TextAlign.right,
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                              borderData: FlBorderData(show: false),
+                              lineBarsData: [
+                                LineChartBarData(
+                                  spots: _spots,
+                                  isCurved: false,
+                                  color: Theme.of(context).colorScheme.primary,
+                                  barWidth: 3,
+                                  isStrokeCapRound: true,
+                                  dotData: FlDotData(
+                                    show: true,
+                                    getDotPainter: (spot, percent, barData, index) {
+                                      return FlDotCirclePainter(
+                                        radius: 4,
+                                        color: Theme.of(context).colorScheme.primary,
+                                        strokeWidth: 2,
+                                        strokeColor: Theme.of(context).colorScheme.surface,
+                                      );
+                                    },
+                                  ),
+                                  belowBarData: BarAreaData(
+                                    show: true,
+                                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('选择比对时间范围', style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: 16),
+                      InputDecorator(
+                        decoration: InputDecoration(
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _selectedRange,
+                            isExpanded: true,
+                            items: ['全部', '1天', '7天', '1个月', '自定义']
+                                .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                                .toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() {
+                                  _selectedRange = val;
+                                });
+                                _processData();
+                              }
                             },
                           ),
                         ),
-                        gridData: const FlGridData(show: true, drawVerticalLine: false),
-                        titlesData: FlTitlesData(
-                          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                          bottomTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              reservedSize: 30,
-                              getTitlesWidget: (value, meta) {
-                                final index = value.toInt();
-                                if (index < 0 || index >= _times.length || value != index.toDouble()) {
-                                  return const SizedBox.shrink();
-                                }
-                                final time = _times[index];
-                                return Padding(
-                                  padding: const EdgeInsets.only(top: 8),
-                                  child: Text(
-                                    '${time.month}-${time.day}',
-                                    style: const TextStyle(fontSize: 10),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                          leftTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              reservedSize: 60,
-                              getTitlesWidget: (value, meta) {
-                                return Text(
-                                  _formatY(value),
-                                  style: const TextStyle(fontSize: 10),
-                                  textAlign: TextAlign.right,
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                        borderData: FlBorderData(show: false),
-                        lineBarsData: [
-                          LineChartBarData(
-                            spots: _spots,
-                            isCurved: false,
-                            color: Theme.of(context).colorScheme.primary,
-                            barWidth: 3,
-                            isStrokeCapRound: true,
-                            dotData: FlDotData(
-                              show: true,
-                              getDotPainter: (spot, percent, barData, index) {
-                                return FlDotCirclePainter(
-                                  radius: 4,
-                                  color: Theme.of(context).colorScheme.primary,
-                                  strokeWidth: 2,
-                                  strokeColor: Theme.of(context).colorScheme.surface,
-                                );
-                              },
-                            ),
-                            belowBarData: BarAreaData(
-                              show: true,
-                              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
-                            ),
-                          ),
-                        ],
                       ),
-                    ),
-                  ),
+                      if (_selectedRange == '自定义') ...[
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _customDaysController,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: '输入天数',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            suffixText: '天',
+                          ),
+                          onChanged: (val) {
+                            setState(() {
+                              _customDays = int.tryParse(val) ?? 0;
+                            });
+                            _processData();
+                          },
+                        ),
                       ],
-                    ),
+                    ],
                   ),
-                  const Expanded(
-                    child: SizedBox(),
-                  ),
-                ],
+                ),
               ),
             ),
+          ],
+        ),
+      ),
     );
   }
 }
