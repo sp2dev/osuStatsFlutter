@@ -341,6 +341,9 @@ class _HistoryPageState extends State<HistoryPage> {
                       );
                       _loadUsers();
                     },
+                    onLongPress: () {
+                      _showLongPressMenu(context, user);
+                    },
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: Row(
@@ -409,6 +412,83 @@ class _HistoryPageState extends State<HistoryPage> {
     } else {
       return date.toString().substring(0, 16).replaceFirst('T', ' ');
     }
+  }
+
+  void _showLongPressMenu(BuildContext context, Map<String, dynamic> user) {
+    final username = user['username'] as String;
+    final userId = user['user_id'] as int;
+    final recordId = user['id'] as int;
+
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.delete),
+              title: const Text('删除本条数据'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _db.deleteRecord(recordId);
+                _loadUsers();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.cleaning_services),
+              title: const Text('清理玩家数据'),
+              subtitle: const Text('仅保留每天的第一条和最后一条查询结果'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await _db.cleanupUserRecords(userId);
+                _loadUsers();
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('$username 的数据已清理')),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_forever, color: Colors.red),
+              title: const Text('删除玩家所有数据', style: TextStyle(color: Colors.red)),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showDeleteAllConfirmDialog(context, username, userId);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.close),
+              title: const Text('取消'),
+              onTap: () => Navigator.pop(ctx),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showDeleteAllConfirmDialog(BuildContext context, String username, int userId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('确认删除所有数据'),
+        content: Text('你确定要删除 $username 的所有缓存数据吗？此操作不可恢复。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _db.deleteAllRecordsForUser(userId);
+              _loadUsers();
+            },
+            child: const Text('删除', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
   }
 }
 

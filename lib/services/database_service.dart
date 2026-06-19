@@ -162,4 +162,41 @@ class DatabaseService {
     final db = await database;
     await db.delete('user_cache', where: 'id = ?', whereArgs: [id]);
   }
+
+  Future<void> deleteAllRecordsForUser(int userId) async {
+    final db = await database;
+    await db.delete('user_cache', where: 'user_id = ?', whereArgs: [userId]);
+  }
+
+  Future<void> cleanupUserRecords(int userId) async {
+    final db = await database;
+    final records = await getRecordsForUser(userId);
+    
+    Map<String, List<Map<String, dynamic>>> recordsByDay = {};
+    for (var record in records) {
+      final date = DateTime.fromMillisecondsSinceEpoch(record['updated_at'] as int);
+      final dayKey = '${date.year}-${date.month}-${date.day}';
+      recordsByDay.putIfAbsent(dayKey, () => []).add(record);
+    }
+    
+    List<int> idsToDelete = [];
+    
+    for (var dailyRecords in recordsByDay.values) {
+      if (dailyRecords.length > 2) {
+        // dailyRecords are sorted by updated_at DESC (from getRecordsForUser)
+        // Keep index 0 (last query of day) and index length-1 (first query of day)
+        for (int i = 1; i < dailyRecords.length - 1; i++) {
+          idsToDelete.add(dailyRecords[i]['id'] as int);
+        }
+      }
+    }
+    
+    if (idsToDelete.isNotEmpty) {
+      Batch batch = db.batch();
+      for (int id in idsToDelete) {
+        batch.delete('user_cache', where: 'id = ?', whereArgs: [id]);
+      }
+      await batch.commit();
+    }
+  }
 }
