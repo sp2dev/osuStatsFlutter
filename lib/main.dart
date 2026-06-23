@@ -4,13 +4,21 @@ import 'package:flutter/material.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:home_widget/home_widget.dart';
 import 'pages/main_page.dart';
 import 'pages/history_page.dart';
 import 'pages/profile_page.dart';
+import 'pages/widget_config_page.dart';
+import 'services/widget_data_service.dart';
+import 'widgets/widget_background_callback.dart';
 import 'utils.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Register home_widget background callback for periodic updates
+  HomeWidget.registerInteractivityCallback(widgetBackgroundCallback);
+
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
@@ -102,8 +110,85 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   int _currentNavIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Check for pending widget configuration after first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkPendingWidgetConfig();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshWidgetData();
+      _checkPendingWidgetConfig();
+    }
+  }
+
+  Future<void> _checkPendingWidgetConfig() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // Reload from disk to pick up values written by Kotlin's native commit()
+    // (Flutter caches SharedPreferences in memory, so cross-process writes
+    // are invisible until we explicitly reload)
+    await prefs.reload();
+
+    // Check for widget tap: the native provider writes last_tapped_widget_id
+    // when the user taps an unconfigured widget on the home screen.
+    final tappedId = prefs.getInt('last_tapped_widget_id');
+    if (tappedId != null && tappedId != 0) {
+      await prefs.remove('last_tapped_widget_id');
+      // Also remove the pending marker the provider wrote
+      await prefs.remove('pending_widget_$tappedId');
+      if (!mounted) return;
+      final result = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => WidgetConfigPage(initialWidgetId: tappedId),
+        ),
+      );
+      if (result == true && mounted) {
+        _refreshWidgetData();
+      }
+      return;
+    }
+
+    // Check for old-style pending widget config (from previous version)
+    final pendingWidgetId = prefs.getInt('pending_widget_config_id');
+    if (pendingWidgetId != null && pendingWidgetId != 0) {
+      await prefs.remove('pending_widget_config_id');
+      if (!mounted) return;
+      final result = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => WidgetConfigPage(initialWidgetId: pendingWidgetId),
+        ),
+      );
+      if (result == true && mounted) {
+        _refreshWidgetData();
+      }
+    }
+  }
+
+  Future<void> _refreshWidgetData() async {
+    try {
+      await WidgetDataService().refreshAllWidgetCharts();
+    } catch (_) {
+      // Silently fail — widgets keep showing last good data
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
