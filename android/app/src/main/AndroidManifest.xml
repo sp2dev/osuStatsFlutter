@@ -35,7 +35,7 @@
         <!-- Widget provider: 2x1 -->
         <receiver
             android:name=".OsustatsWidgetProvider"
-            android:exported="true"
+            android:exported="false"
             android:label="@string/widget_2x1_name">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -48,7 +48,7 @@
         <!-- Widget provider: 4x2 (subclass for distinct manifest entry) -->
         <receiver
             android:name=".OsustatsWidgetProvider4x2"
-            android:exported="true"
+            android:exported="false"
             android:label="@string/widget_4x2_name">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

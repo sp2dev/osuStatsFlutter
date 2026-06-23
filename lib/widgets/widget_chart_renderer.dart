@@ -112,7 +112,10 @@ class WidgetChartRenderer {
     final picture = recorder.endRecording();
     final image = await picture.toImage(width.toInt(), height.toInt());
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-
+    image.dispose();
+    if (byteData == null) {
+      throw StateError('Failed to encode widget chart PNG');
+    }
     final dir = await getApplicationCacheDirectory();
     final widgetDir = Directory('${dir.path}/widget_charts');
     if (!await widgetDir.exists()) {

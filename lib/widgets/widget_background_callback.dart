@@ -100,7 +100,7 @@ String _formatNumCompact(dynamic val) {
     return '${(numVal / 1000000000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}B';
   } else if (numVal.abs() >= 1000000) {
     return '${(numVal / 1000000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}M';
-  } else if (numVal.abs() >= 10000) { // Compress >= 10k or maybe >= 1000? Let's say >= 10k to keep 4 digits. Actually, 1k is fine too, but usually 4 digits fit. Let's do >= 10000 for K, or >= 1000? Let's just do >= 1000.
+  } else if (numVal.abs() >= 10000) {
     return '${(numVal / 1000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}K';
   }
 

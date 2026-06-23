@@ -253,20 +253,37 @@ class _WidgetConfigPageState extends State<WidgetConfigPage> {
             subtitle: _userList.isEmpty ? '数据库中暂无玩家记录，请手动输入' : null,
             child: Column(
               children: [
-                _buildStyledDropdown<String>(
-                  value: _selectedUsername,
-                  items: _userList
-                      .map(
-                        (name) =>
-                            DropdownMenuItem(value: name, child: Text(name)),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedUsername = value;
-                    });
-                  },
-                ),
+                if (_userList.isEmpty)
+                  TextField(
+                    controller: _usernameController,
+                    decoration: InputDecoration(
+                      labelText: '输入玩家用户名',
+                      prefixIcon: const Icon(Icons.person),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onChanged: (val) =>
+                        setState(() => _selectedUsername = val.trim()),
+                  )
+                else
+                  _buildStyledDropdown<String>(
+                    value: _selectedUsername,
+                    items: _userList
+                        .map(
+                          (name) => DropdownMenuItem(
+                            value: name,
+                            child: Text(name),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedUsername = value;
+                        _usernameController.text = value ?? '';
+                      });
+                    },
+                  ),
               ],
             ),
           ),
