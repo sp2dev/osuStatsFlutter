@@ -109,6 +109,17 @@ class DatabaseService {
     }
   }
 
+  Future<bool> hasModeChangedFromLatest({
+    required int userId,
+    required String modeKey,
+    required Map<String, dynamic> newData,
+  }) async {
+    final latest = await getLatestRecord(userId);
+    if (latest == null) return true;
+    final storedJson = latest[modeKey] as String?;
+    return _stableFingerprint(newData) != _fpFromStored(storedJson);
+  }
+
   Future<bool> hasChangedFromLatest({
     required int userId,
     Map<String, dynamic>? osuData,

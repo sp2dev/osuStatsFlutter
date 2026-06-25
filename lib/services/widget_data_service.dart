@@ -190,6 +190,25 @@ class WidgetDataService {
           await prefs.setString(
               'widget_${config.widgetId}_raw_data', jsonEncode(apiData));
 
+          // Save to DB if changed
+          if (await db.hasModeChangedFromLatest(
+              userId: userId, modeKey: config.modeKey, newData: apiData)) {
+            final latest = await db.getLatestRecord(userId);
+            await db.saveUserData(
+              userId: userId,
+              username: config.username,
+              countryCode: apiData['country_code'] as String?,
+              beatmapPlaycountsCount: apiData['beatmap_playcounts_count'] as int?,
+              followerCount: apiData['follower_count'] as int?,
+              userAchievements: apiData['user_achievements'] as List?,
+              osuJson: config.modeKey == 'osu_json' ? jsonEncode(apiData) : latest?['osu_json'] as String?,
+              taikoJson: config.modeKey == 'taiko_json' ? jsonEncode(apiData) : latest?['taiko_json'] as String?,
+              fruitsJson: config.modeKey == 'fruits_json' ? jsonEncode(apiData) : latest?['fruits_json'] as String?,
+              maniaJson: config.modeKey == 'mania_json' ? jsonEncode(apiData) : latest?['mania_json'] as String?,
+            );
+            await db.cleanupUserRecords(userId);
+          }
+
           // Build data points from history
           final history = await db.getRecordsForUser(userId);
           final dataPoints = _extractDataPoints(

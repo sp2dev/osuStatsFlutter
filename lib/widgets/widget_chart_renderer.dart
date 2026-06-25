@@ -123,7 +123,7 @@ class WidgetChartRenderer {
     }
 
     final file = File('${widgetDir.path}/widget_$widgetId.png');
-    await file.writeAsBytes(byteData!.buffer.asUint8List());
+    await file.writeAsBytes(byteData.buffer.asUint8List());
     return file;
   }
 }

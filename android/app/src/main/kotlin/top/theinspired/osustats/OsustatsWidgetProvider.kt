@@ -168,6 +168,12 @@ open class OsustatsWidgetProvider : AppWidgetProvider() {
                     }
                 } else {
                     showConfiguredState(context, prefs, views, appWidgetId, username, isLarge)
+                    
+                    // Check if cache is stale (>= 30 mins)
+                    val lastFetch = prefs.getLong("flutter.widget_${appWidgetId}_last_api_fetch", 0L)
+                    if (System.currentTimeMillis() - lastFetch >= 30 * 60 * 1000L) {
+                        triggerBackgroundUpdate(context, appWidgetId)
+                    }
                 }
 
                 // Setup click intent (Bug 8 fix: use broadcast, no prefs write here)
@@ -299,6 +305,16 @@ open class OsustatsWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.widget_update_time, "$dateStr 更新")
             } else {
                 views.setTextViewText(R.id.widget_update_time, "等待首次更新")
+            }
+        }
+
+        private fun triggerBackgroundUpdate(context: Context, appWidgetId: Int) {
+            try {
+                val uri = android.net.Uri.parse("osustats://update?widgetId=$appWidgetId")
+                val pendingIntent = es.antonborri.home_widget.HomeWidgetBackgroundIntent.getBroadcast(context, uri)
+                pendingIntent.send()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to trigger background update", e)
             }
         }
 
