@@ -223,8 +223,8 @@ class ThemeSettings {
 final themeSettingsNotifier = ValueNotifier<ThemeSettings>(
   ThemeSettings(
     themeMode: AppThemeMode.system,
-    seedColor: const Color(0xFFFF66AA),
-    useDynamicColor: false,
+    seedColor: const Color(0xFF3498DB),
+    useDynamicColor: true,
   ),
 );
 

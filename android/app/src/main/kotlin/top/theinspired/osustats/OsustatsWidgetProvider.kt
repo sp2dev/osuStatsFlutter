@@ -163,6 +163,7 @@ open class OsustatsWidgetProvider : AppWidgetProvider() {
                     if (!pendingUser.isNullOrEmpty()) {
                         applyPendingConfig(prefs, appWidgetId, pendingUser)
                         showLoadingState(views, pendingUser, isLarge)
+                        triggerBackgroundUpdate(context, appWidgetId)
                     } else {
                         showConfigPrompt(views, isLarge)
                     }
@@ -206,8 +207,6 @@ open class OsustatsWidgetProvider : AppWidgetProvider() {
             // Bug 3 fix: use getLong instead of getInt (Flutter setInt stores as Long)
             editor.putLong("flutter.widget_${appWidgetId}_custom_days",
                 prefs.getLong("flutter.pending_global_custom_days", 0L))
-            editor.putLong("flutter.widget_${appWidgetId}_last_api_fetch",
-                System.currentTimeMillis())
 
             // Clear pending global
             editor.remove("flutter.pending_global_username")

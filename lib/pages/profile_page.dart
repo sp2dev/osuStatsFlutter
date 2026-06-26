@@ -550,7 +550,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        "在桌面添加小组件以快速查看玩家数据趋势。支持 2×1 和 4×2 两种尺寸。",
+                        "在桌面添加小组件以快速查看玩家数据趋势。支持 2x1 和 4x2 两种尺寸。",
                         style: TextStyle(
                           fontSize: 13,
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
