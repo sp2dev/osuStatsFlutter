@@ -34,9 +34,7 @@ String formatNumCompact(dynamic val) {
 
   if (numVal == null) return '-';
   
-  if (numVal.abs() >= 1000000000) {
-    return '${(numVal / 1000000000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}B';
-  } else if (numVal.abs() >= 1000000) {
+  if (numVal.abs() >= 1000000) {
     return '${(numVal / 1000000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}M';
   } else if (numVal.abs() >= 10000) {
     return '${(numVal / 1000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}K';
