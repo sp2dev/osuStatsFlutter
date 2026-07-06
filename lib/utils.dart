@@ -8,14 +8,39 @@ String formatNum(dynamic val) {
   
   final hasSign = str.startsWith('-') || str.startsWith('+');
   final sign = hasSign ? str[0] : '';
-  final digits = hasSign ? str.substring(1) : str;
+  final rest = hasSign ? str.substring(1) : str;
+  
+  // Split integer and decimal parts to avoid inserting commas into decimals
+  final dotIndex = rest.indexOf('.');
+  final intPart = dotIndex >= 0 ? rest.substring(0, dotIndex) : rest;
+  final decPart = dotIndex >= 0 ? rest.substring(dotIndex) : '';
   
   final buffer = StringBuffer();
-  for (int i = 0; i < digits.length; i++) {
-    if (i > 0 && (digits.length - i) % 3 == 0) buffer.write(',');
-    buffer.write(digits[i]);
+  for (int i = 0; i < intPart.length; i++) {
+    if (i > 0 && (intPart.length - i) % 3 == 0) buffer.write(',');
+    buffer.write(intPart[i]);
   }
-  return '$sign$buffer';
+  return '$sign$buffer$decPart';
+}
+
+String formatNumCompact(dynamic val) {
+  if (val == null) return '-';
+  num? numVal;
+  if (val is num) {
+    numVal = val;
+  } else {
+    numVal = num.tryParse(val.toString());
+  }
+
+  if (numVal == null) return '-';
+  
+  if (numVal.abs() >= 1000000) {
+    return '${(numVal / 1000000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}M';
+  } else if (numVal.abs() >= 10000) {
+    return '${(numVal / 1000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}K';
+  }
+
+  return formatNum(val);
 }
 
 String formatDuration(int seconds) {
@@ -196,8 +221,8 @@ class ThemeSettings {
 final themeSettingsNotifier = ValueNotifier<ThemeSettings>(
   ThemeSettings(
     themeMode: AppThemeMode.system,
-    seedColor: const Color(0xFFFF66AA),
-    useDynamicColor: false,
+    seedColor: const Color(0xFF3498DB),
+    useDynamicColor: true,
   ),
 );
 

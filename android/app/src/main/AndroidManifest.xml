@@ -1,5 +1,7 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <application
         android:label="osu! stats checker"
         android:name="${applicationName}"
@@ -31,6 +33,44 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- Widget provider: 2x1 -->
+        <receiver
+            android:name=".OsustatsWidgetProvider"
+            android:exported="false"
+            android:label="@string/widget_2x1_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/osustats_widget_2x1_info" />
+        </receiver>
+
+        <!-- Widget provider: 4x2 (subclass for distinct manifest entry) -->
+        <receiver
+            android:name=".OsustatsWidgetProvider4x2"
+            android:exported="false"
+            android:label="@string/widget_4x2_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/osustats_widget_4x2_info" />
+        </receiver>
+
+        <!-- WorkManager: 让后台任务在设备重启后自动恢复 -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup" />
+        </provider>
+
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
