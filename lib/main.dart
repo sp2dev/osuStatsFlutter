@@ -5,6 +5,7 @@ import 'package:dynamic_color/dynamic_color.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:home_widget/home_widget.dart';
+import 'package:workmanager/workmanager.dart';
 import 'pages/main_page.dart';
 import 'pages/history_page.dart';
 import 'pages/profile_page.dart';
@@ -13,10 +14,27 @@ import 'services/widget_data_service.dart';
 import 'widgets/widget_background_callback.dart';
 import 'utils.dart';
 
+/// Workmanager 后台任务回调（必须是顶层函数，且加 @pragma 注解）
+@pragma('vm:entry-point')
+void workmanagerCallbackDispatcher() {
+  Workmanager().executeTask((taskName, inputData) async {
+    try {
+      if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+        sqfliteFfiInit();
+        databaseFactory = databaseFactoryFfi;
+      }
+      await WidgetDataService().refreshAllWidgetCharts();
+    } catch (_) {
+      // 后台任务失败静默处理，保留上次数据
+    }
+    return Future.value(true);
+  });
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Register home_widget background callback for periodic updates
+  // Register home_widget background callback (handles on-demand widget taps)
   HomeWidget.registerInteractivityCallback(widgetBackgroundCallback);
 
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
@@ -24,10 +42,26 @@ void main() async {
     databaseFactory = databaseFactoryFfi;
   }
 
+  // 初始化 Workmanager 并注册每 60 分钟自动刷新小组件的周期任务
+  if (!kIsWeb && Platform.isAndroid) {
+    await Workmanager().initialize(workmanagerCallbackDispatcher);
+    await Workmanager().registerPeriodicTask(
+      'widget_auto_refresh',
+      'widgetRefreshTask',
+      frequency: const Duration(minutes: 60),
+      existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
+      constraints: Constraints(
+        networkType: NetworkType.connected,
+      ),
+      backoffPolicy: BackoffPolicy.linear,
+      backoffPolicyDelay: const Duration(minutes: 5),
+    );
+  }
+
   // Load saved theme settings
   final prefs = await SharedPreferences.getInstance();
   final themeModeIndex = prefs.getInt('theme_mode_pref') ?? AppThemeMode.system.index;
-  final colorValue = prefs.getInt('theme_color_pref') ?? const Color(0xFFFF66AA).toARGB32();
+  final colorValue = prefs.getInt('theme_color_pref') ?? const Color(0xFF3498DB).toARGB32();
   final useDynamic = prefs.getBool('use_dynamic_color_pref') ?? false;
 
   themeSettingsNotifier.value = ThemeSettings(
