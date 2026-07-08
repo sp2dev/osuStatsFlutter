@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import '../core/constants.dart';
+import '../core/logger.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._();
@@ -17,63 +19,79 @@ class DatabaseService {
 
   Future<Database> _initDb() async {
     final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'osu_stats.db');
+    final path = join(dbPath, AppConstants.dbName);
     return openDatabase(
       path,
       version: 1,
       onCreate: (db, version) async {
         await db.execute('''
-          CREATE TABLE user_cache (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            username TEXT NOT NULL,
-            country_code TEXT,
-            beatmap_playcounts_count INTEGER,
-            follower_count INTEGER,
-            user_achievements TEXT,
-            osu_json TEXT,
-            taiko_json TEXT,
-            fruits_json TEXT,
-            mania_json TEXT,
-            updated_at INTEGER NOT NULL
+          CREATE TABLE ${AppConstants.tableUserCache} (
+            ${AppConstants.colId} INTEGER PRIMARY KEY AUTOINCREMENT,
+            ${AppConstants.colUserId} INTEGER NOT NULL,
+            ${AppConstants.colUsername} TEXT NOT NULL,
+            ${AppConstants.colCountryCode} TEXT,
+            ${AppConstants.colBeatmapPlaycountsCount} INTEGER,
+            ${AppConstants.colFollowerCount} INTEGER,
+            ${AppConstants.colUserAchievements} TEXT,
+            ${AppConstants.colOsuJson} TEXT,
+            ${AppConstants.colTaikoJson} TEXT,
+            ${AppConstants.colFruitsJson} TEXT,
+            ${AppConstants.colManiaJson} TEXT,
+            ${AppConstants.colUpdatedAt} INTEGER NOT NULL
           )
         ''');
+        appLogger.i('Database initialized and tables created.');
       },
     );
   }
 
   Future<Map<String, dynamic>?> getLatestRecord(int userId) async {
-    final db = await database;
-    final results = await db.query(
-      'user_cache',
-      where: 'user_id = ?',
-      whereArgs: [userId],
-      orderBy: 'updated_at DESC',
-      limit: 1,
-    );
-    return results.isNotEmpty ? results.first : null;
+    try {
+      final db = await database;
+      final results = await db.query(
+        AppConstants.tableUserCache,
+        where: '${AppConstants.colUserId} = ?',
+        whereArgs: [userId],
+        orderBy: '${AppConstants.colUpdatedAt} DESC',
+        limit: 1,
+      );
+      return results.isNotEmpty ? results.first : null;
+    } catch (e, stackTrace) {
+      appLogger.e('Error getting latest record', error: e, stackTrace: stackTrace);
+      return null;
+    }
   }
 
   Future<Map<String, dynamic>?> getPreviousRecord(int userId, int currentUpdatedAt) async {
-    final db = await database;
-    final results = await db.query(
-      'user_cache',
-      where: 'user_id = ? AND updated_at < ?',
-      whereArgs: [userId, currentUpdatedAt],
-      orderBy: 'updated_at DESC',
-      limit: 1,
-    );
-    return results.isNotEmpty ? results.first : null;
+    try {
+      final db = await database;
+      final results = await db.query(
+        AppConstants.tableUserCache,
+        where: '${AppConstants.colUserId} = ? AND ${AppConstants.colUpdatedAt} < ?',
+        whereArgs: [userId, currentUpdatedAt],
+        orderBy: '${AppConstants.colUpdatedAt} DESC',
+        limit: 1,
+      );
+      return results.isNotEmpty ? results.first : null;
+    } catch (e, stackTrace) {
+      appLogger.e('Error getting previous record', error: e, stackTrace: stackTrace);
+      return null;
+    }
   }
 
   Future<List<Map<String, dynamic>>> getRecordsForUser(int userId) async {
-    final db = await database;
-    return db.query(
-      'user_cache',
-      where: 'user_id = ?',
-      whereArgs: [userId],
-      orderBy: 'updated_at DESC',
-    );
+    try {
+      final db = await database;
+      return db.query(
+        AppConstants.tableUserCache,
+        where: '${AppConstants.colUserId} = ?',
+        whereArgs: [userId],
+        orderBy: '${AppConstants.colUpdatedAt} DESC',
+      );
+    } catch (e, stackTrace) {
+      appLogger.e('Error getting records for user', error: e, stackTrace: stackTrace);
+      return [];
+    }
   }
 
   static String _stableFingerprint(Map<String, dynamic>? data) {
@@ -129,10 +147,10 @@ class DatabaseService {
   }) async {
     final latest = await getLatestRecord(userId);
     if (latest == null) return true;
-    return _stableFingerprint(osuData) != _fpFromStored(latest['osu_json'] as String?) ||
-        _stableFingerprint(taikoData) != _fpFromStored(latest['taiko_json'] as String?) ||
-        _stableFingerprint(fruitsData) != _fpFromStored(latest['fruits_json'] as String?) ||
-        _stableFingerprint(maniaData) != _fpFromStored(latest['mania_json'] as String?);
+    return _stableFingerprint(osuData) != _fpFromStored(latest[AppConstants.colOsuJson] as String?) ||
+        _stableFingerprint(taikoData) != _fpFromStored(latest[AppConstants.colTaikoJson] as String?) ||
+        _stableFingerprint(fruitsData) != _fpFromStored(latest[AppConstants.colFruitsJson] as String?) ||
+        _stableFingerprint(maniaData) != _fpFromStored(latest[AppConstants.colManiaJson] as String?);
   }
 
   Future<int> saveUserData({
@@ -147,67 +165,88 @@ class DatabaseService {
     String? fruitsJson,
     String? maniaJson,
   }) async {
-    final db = await database;
-    return db.insert('user_cache', {
-      'user_id': userId,
-      'username': username,
-      'country_code': countryCode,
-      'beatmap_playcounts_count': beatmapPlaycountsCount,
-      'follower_count': followerCount,
-      'user_achievements':
-          userAchievements != null ? jsonEncode(userAchievements) : null,
-      'osu_json': osuJson,
-      'taiko_json': taikoJson,
-      'fruits_json': fruitsJson,
-      'mania_json': maniaJson,
-      'updated_at': DateTime.now().millisecondsSinceEpoch,
-    });
+    try {
+      final db = await database;
+      return db.insert(AppConstants.tableUserCache, {
+        AppConstants.colUserId: userId,
+        AppConstants.colUsername: username,
+        AppConstants.colCountryCode: countryCode,
+        AppConstants.colBeatmapPlaycountsCount: beatmapPlaycountsCount,
+        AppConstants.colFollowerCount: followerCount,
+        AppConstants.colUserAchievements:
+            userAchievements != null ? jsonEncode(userAchievements) : null,
+        AppConstants.colOsuJson: osuJson,
+        AppConstants.colTaikoJson: taikoJson,
+        AppConstants.colFruitsJson: fruitsJson,
+        AppConstants.colManiaJson: maniaJson,
+        AppConstants.colUpdatedAt: DateTime.now().millisecondsSinceEpoch,
+      });
+    } catch (e, stackTrace) {
+      appLogger.e('Error saving user data', error: e, stackTrace: stackTrace);
+      return -1;
+    }
   }
 
   Future<List<Map<String, dynamic>>> getAllUsers() async {
-    final db = await database;
-    return db.query('user_cache', orderBy: 'updated_at DESC');
+    try {
+      final db = await database;
+      return db.query(AppConstants.tableUserCache, orderBy: '${AppConstants.colUpdatedAt} DESC');
+    } catch (e, stackTrace) {
+      appLogger.e('Error getting all users', error: e, stackTrace: stackTrace);
+      return [];
+    }
   }
 
   Future<void> deleteRecord(int id) async {
-    final db = await database;
-    await db.delete('user_cache', where: 'id = ?', whereArgs: [id]);
+    try {
+      final db = await database;
+      await db.delete(AppConstants.tableUserCache, where: '${AppConstants.colId} = ?', whereArgs: [id]);
+    } catch (e, stackTrace) {
+      appLogger.e('Error deleting record', error: e, stackTrace: stackTrace);
+    }
   }
 
   Future<void> deleteAllRecordsForUser(int userId) async {
-    final db = await database;
-    await db.delete('user_cache', where: 'user_id = ?', whereArgs: [userId]);
+    try {
+      final db = await database;
+      await db.delete(AppConstants.tableUserCache, where: '${AppConstants.colUserId} = ?', whereArgs: [userId]);
+    } catch (e, stackTrace) {
+      appLogger.e('Error deleting all records for user', error: e, stackTrace: stackTrace);
+    }
   }
 
   Future<void> cleanupUserRecords(int userId) async {
-    final db = await database;
-    final records = await getRecordsForUser(userId);
-    
-    Map<String, List<Map<String, dynamic>>> recordsByDay = {};
-    for (var record in records) {
-      final date = DateTime.fromMillisecondsSinceEpoch(record['updated_at'] as int);
-      final dayKey = '${date.year}-${date.month}-${date.day}';
-      recordsByDay.putIfAbsent(dayKey, () => []).add(record);
-    }
-    
-    List<int> idsToDelete = [];
-    
-    for (var dailyRecords in recordsByDay.values) {
-      if (dailyRecords.length > 2) {
-        // dailyRecords are sorted by updated_at DESC (from getRecordsForUser)
-        // Keep index 0 (last query of day) and index length-1 (first query of day)
-        for (int i = 1; i < dailyRecords.length - 1; i++) {
-          idsToDelete.add(dailyRecords[i]['id'] as int);
+    try {
+      final db = await database;
+      final records = await getRecordsForUser(userId);
+      
+      Map<String, List<Map<String, dynamic>>> recordsByDay = {};
+      for (var record in records) {
+        final date = DateTime.fromMillisecondsSinceEpoch(record[AppConstants.colUpdatedAt] as int);
+        final dayKey = '${date.year}-${date.month}-${date.day}';
+        recordsByDay.putIfAbsent(dayKey, () => []).add(record);
+      }
+      
+      List<int> idsToDelete = [];
+      
+      for (var dailyRecords in recordsByDay.values) {
+        if (dailyRecords.length > 2) {
+          for (int i = 1; i < dailyRecords.length - 1; i++) {
+            idsToDelete.add(dailyRecords[i][AppConstants.colId] as int);
+          }
         }
       }
-    }
-    
-    if (idsToDelete.isNotEmpty) {
-      Batch batch = db.batch();
-      for (int id in idsToDelete) {
-        batch.delete('user_cache', where: 'id = ?', whereArgs: [id]);
+      
+      if (idsToDelete.isNotEmpty) {
+        Batch batch = db.batch();
+        for (int id in idsToDelete) {
+          batch.delete(AppConstants.tableUserCache, where: '${AppConstants.colId} = ?', whereArgs: [id]);
+        }
+        await batch.commit();
+        appLogger.i('Cleaned up ${idsToDelete.length} records for user $userId');
       }
-      await batch.commit();
+    } catch (e, stackTrace) {
+      appLogger.e('Error cleaning up user records', error: e, stackTrace: stackTrace);
     }
   }
 }

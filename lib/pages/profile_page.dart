@@ -4,6 +4,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/osu_api_service.dart';
 import '../utils.dart';
 import 'widget_config_page.dart';
+import 'package:provider/provider.dart';
+import '../providers/app_state_provider.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -100,9 +102,9 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<ThemeSettings>(
-      valueListenable: themeSettingsNotifier,
-      builder: (context, themeSettings, _) {
+    return Consumer<AppStateProvider>(
+      builder: (context, provider, _) {
+        final themeSettings = provider.themeSettings;
         return Scaffold(
           appBar: AppBar(
             title: const Text('设置'),
@@ -353,7 +355,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           ],
                           selected: {themeSettings.themeMode},
                           onSelectionChanged: (newSelection) {
-                            updateThemeSettings(themeMode: newSelection.first);
+                            provider.updateThemeSettings(themeMode: newSelection.first);
                           },
                         ),
                       ),
@@ -378,7 +380,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
                           return GestureDetector(
                             onTap: () {
-                              updateThemeSettings(
+                              provider.updateThemeSettings(
                                 seedColor: color,
                                 useDynamicColor: false,
                               );
@@ -418,7 +420,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         subtitle: const Text('开启后，将在支持的设备上（如 Android 12+）启用动态主题色。'),
                         value: themeSettings.useDynamicColor,
                         onChanged: (val) {
-                          updateThemeSettings(useDynamicColor: val);
+                          provider.updateThemeSettings(useDynamicColor: val);
                         },
                       ),
                     ],
@@ -427,9 +429,9 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
               const SizedBox(height: 16),
               // Compare Target Settings Card
-              ValueListenableBuilder<CompareTarget>(
-                valueListenable: compareTargetNotifier,
-                builder: (context, compareTarget, _) {
+              Builder(
+                builder: (context) {
+                  final compareTarget = provider.compareTarget;
                   return Card(
                     elevation: 0,
                     color: Theme.of(context).colorScheme.surfaceContainerLow,
@@ -495,7 +497,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                 dropdownColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                                 borderRadius: BorderRadius.circular(16),
                                 onChanged: (value) {
-                                  if (value != null) updateCompareTarget(value);
+                                  if (value != null) provider.updateCompareTarget(value);
                                 },
                                 items: const [
                                   DropdownMenuItem(

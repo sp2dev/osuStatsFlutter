@@ -5,6 +5,8 @@ import '../utils.dart';
 import '../widgets/widget_chart_renderer.dart';
 import 'osu_api_service.dart';
 import 'database_service.dart';
+import '../core/constants.dart';
+import '../core/logger.dart';
 
 class WidgetConfig {
   final int widgetId;
@@ -40,11 +42,7 @@ class WidgetDataService {
     'OsustatsWidgetProvider4x2',
   ];
 
-  /// Trigger native widget update for all provider classes.
-  /// Includes a small delay before sending broadcast to allow SharedPreferences
-  /// to flush to disk (cross-process visibility).
   Future<void> updateAllWidgets() async {
-    // Allow pending SharedPreferences writes to commit (cross-process)
     await Future.delayed(const Duration(milliseconds: 500));
     for (final name in _providerNames) {
       try {
@@ -54,39 +52,40 @@ class WidgetDataService {
           iOSName: null,
           qualifiedAndroidName: null,
         );
-      } catch (_) {}
+      } catch (e, stackTrace) {
+        appLogger.e('Failed to update widget $name', error: e, stackTrace: stackTrace);
+      }
     }
   }
   static const _chartStaleMinutes = 30;
 
   static const _modeDisplayMap = {
-    'osu_json': 'osu',
-    'taiko_json': 'taiko',
-    'fruits_json': 'fruits',
-    'mania_json': 'mania',
+    AppConstants.colOsuJson: 'osu',
+    AppConstants.colTaikoJson: 'taiko',
+    AppConstants.colFruitsJson: 'fruits',
+    AppConstants.colManiaJson: 'mania',
   };
 
   static const _modeDisplayToKey = {
-    'osu': 'osu_json',
-    'taiko': 'taiko_json',
-    'fruits': 'fruits_json',
-    'mania': 'mania_json',
+    'osu': AppConstants.colOsuJson,
+    'taiko': AppConstants.colTaikoJson,
+    'fruits': AppConstants.colFruitsJson,
+    'mania': AppConstants.colManiaJson,
   };
 
   String modeKeyToDisplay(String modeKey) => _modeDisplayMap[modeKey] ?? 'osu';
   String modeDisplayToKey(String modeDisplay) =>
-      _modeDisplayToKey[modeDisplay] ?? 'osu_json';
-
-  // --- Bug 1 fix: Use JSON string for active_widget_ids (cross-process safe) ---
+      _modeDisplayToKey[modeDisplay] ?? AppConstants.colOsuJson;
 
   Future<List<int>> getActiveWidgetIds() async {
     final prefs = await SharedPreferences.getInstance();
-    final str = prefs.getString('active_widget_ids');
+    final str = prefs.getString(AppConstants.keyActiveWidgetIds);
     if (str == null || str.isEmpty) return [];
     try {
       final list = (jsonDecode(str) as List).cast<String>();
       return list.map((s) => int.tryParse(s)).whereType<int>().toList();
-    } catch (_) {
+    } catch (e, stackTrace) {
+      appLogger.e('Failed to parse active widget ids', error: e, stackTrace: stackTrace);
       return [];
     }
   }
@@ -97,7 +96,7 @@ class WidgetDataService {
     if (!ids.contains(widgetId)) {
       ids.add(widgetId);
       await prefs.setString(
-        'active_widget_ids',
+        AppConstants.keyActiveWidgetIds,
         jsonEncode(ids.map((e) => e.toString()).toList()),
       );
     }
@@ -108,7 +107,7 @@ class WidgetDataService {
     final ids = await getActiveWidgetIds();
     ids.remove(widgetId);
     await prefs.setString(
-      'active_widget_ids',
+      AppConstants.keyActiveWidgetIds,
       jsonEncode(ids.map((e) => e.toString()).toList()),
     );
   }
@@ -117,17 +116,12 @@ class WidgetDataService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('widget_${config.widgetId}_username', config.username);
     await prefs.setString('widget_${config.widgetId}_mode_key', config.modeKey);
-    await prefs.setString(
-        'widget_${config.widgetId}_mode_display', config.modeDisplay);
+    await prefs.setString('widget_${config.widgetId}_mode_display', config.modeDisplay);
     await prefs.setString('widget_${config.widgetId}_field_key', config.fieldKey);
-    await prefs.setString(
-        'widget_${config.widgetId}_field_label', config.fieldLabel);
-    await prefs.setString(
-        'widget_${config.widgetId}_time_range', config.timeRange);
-    await prefs.setInt(
-        'widget_${config.widgetId}_custom_days', config.customDays);
+    await prefs.setString('widget_${config.widgetId}_field_label', config.fieldLabel);
+    await prefs.setString('widget_${config.widgetId}_time_range', config.timeRange);
+    await prefs.setInt('widget_${config.widgetId}_custom_days', config.customDays);
 
-    // Track active widgets
     await _addActiveWidgetId(config.widgetId);
   }
 
@@ -139,35 +133,23 @@ class WidgetDataService {
     return WidgetConfig(
       widgetId: widgetId,
       username: username,
-      modeKey:
-          prefs.getString('widget_${widgetId}_mode_key') ?? 'osu_json',
-      modeDisplay:
-          prefs.getString('widget_${widgetId}_mode_display') ?? 'osu',
-      fieldKey:
-          prefs.getString('widget_${widgetId}_field_key') ?? 'pp',
-      fieldLabel:
-          prefs.getString('widget_${widgetId}_field_label') ?? 'pp',
-      timeRange:
-          prefs.getString('widget_${widgetId}_time_range') ?? '全部',
-      customDays:
-          prefs.getInt('widget_${widgetId}_custom_days') ?? 0,
+      modeKey: prefs.getString('widget_${widgetId}_mode_key') ?? AppConstants.colOsuJson,
+      modeDisplay: prefs.getString('widget_${widgetId}_mode_display') ?? 'osu',
+      fieldKey: prefs.getString('widget_${widgetId}_field_key') ?? 'pp',
+      fieldLabel: prefs.getString('widget_${widgetId}_field_label') ?? 'pp',
+      timeRange: prefs.getString('widget_${widgetId}_time_range') ?? AppConstants.rangeAll,
+      customDays: prefs.getInt('widget_${widgetId}_custom_days') ?? 0,
     );
   }
 
   Future<bool> _shouldFetchFromApi(int widgetId) async {
     final prefs = await SharedPreferences.getInstance();
-    final lastFetch =
-        prefs.getInt('widget_${widgetId}_last_api_fetch') ?? 0;
+    final lastFetch = prefs.getInt('widget_${widgetId}_last_api_fetch') ?? 0;
     if (lastFetch == 0) return true;
-    final lastTime =
-        DateTime.fromMillisecondsSinceEpoch(lastFetch);
-    return DateTime.now()
-        .difference(lastTime)
-        .inMinutes >= _cacheMinIntervalMinutes;
+    final lastTime = DateTime.fromMillisecondsSinceEpoch(lastFetch);
+    return DateTime.now().difference(lastTime).inMinutes >= _cacheMinIntervalMinutes;
   }
 
-  /// Fetch data for a widget config, using cache when possible.
-  /// Returns {dataPoints, currentValue, currentValueFormatted, username}.
   Future<Map<String, dynamic>?> fetchWidgetData(WidgetConfig config) async {
     final db = DatabaseService();
     final api = OsuApiService();
@@ -175,7 +157,6 @@ class WidgetDataService {
 
     final modeDisplay = modeKeyToDisplay(config.modeKey);
 
-    // Try to get a fresh API call if cache expired
     if (await _shouldFetchFromApi(config.widgetId)) {
       try {
         final apiData = await api.getUserData(config.username, modeDisplay);
@@ -184,15 +165,10 @@ class WidgetDataService {
           final stats = apiData['statistics'] as Map<String, dynamic>? ?? {};
           final currentValue = stats[config.fieldKey];
 
-          await prefs.setInt(
-              'widget_${config.widgetId}_last_api_fetch',
-              DateTime.now().millisecondsSinceEpoch);
-          await prefs.setString(
-              'widget_${config.widgetId}_raw_data', jsonEncode(apiData));
+          await prefs.setInt('widget_${config.widgetId}_last_api_fetch', DateTime.now().millisecondsSinceEpoch);
+          await prefs.setString('widget_${config.widgetId}_raw_data', jsonEncode(apiData));
 
-          // Save to DB if changed
-          if (await db.hasModeChangedFromLatest(
-              userId: userId, modeKey: config.modeKey, newData: apiData)) {
+          if (await db.hasModeChangedFromLatest(userId: userId, modeKey: config.modeKey, newData: apiData)) {
             final latest = await db.getLatestRecord(userId);
             await db.saveUserData(
               userId: userId,
@@ -201,21 +177,17 @@ class WidgetDataService {
               beatmapPlaycountsCount: apiData['beatmap_playcounts_count'] as int?,
               followerCount: apiData['follower_count'] as int?,
               userAchievements: apiData['user_achievements'] as List?,
-              osuJson: config.modeKey == 'osu_json' ? jsonEncode(apiData) : latest?['osu_json'] as String?,
-              taikoJson: config.modeKey == 'taiko_json' ? jsonEncode(apiData) : latest?['taiko_json'] as String?,
-              fruitsJson: config.modeKey == 'fruits_json' ? jsonEncode(apiData) : latest?['fruits_json'] as String?,
-              maniaJson: config.modeKey == 'mania_json' ? jsonEncode(apiData) : latest?['mania_json'] as String?,
+              osuJson: config.modeKey == AppConstants.colOsuJson ? jsonEncode(apiData) : latest?[AppConstants.colOsuJson] as String?,
+              taikoJson: config.modeKey == AppConstants.colTaikoJson ? jsonEncode(apiData) : latest?[AppConstants.colTaikoJson] as String?,
+              fruitsJson: config.modeKey == AppConstants.colFruitsJson ? jsonEncode(apiData) : latest?[AppConstants.colFruitsJson] as String?,
+              maniaJson: config.modeKey == AppConstants.colManiaJson ? jsonEncode(apiData) : latest?[AppConstants.colManiaJson] as String?,
             );
             await db.cleanupUserRecords(userId);
           }
 
-          // Build data points from history
           final history = await db.getRecordsForUser(userId);
-          final dataPoints = _extractDataPoints(
-              history, config.modeKey, config.fieldKey, config);
-
-          final formattedValue = _formatStatValue(
-              currentValue, config.fieldKey);
+          final dataPoints = _extractDataPoints(history, config.modeKey, config.fieldKey, config);
+          final formattedValue = _formatStatValue(currentValue, config.fieldKey);
 
           return {
             'dataPoints': dataPoints,
@@ -224,12 +196,11 @@ class WidgetDataService {
             'username': config.username,
           };
         }
-      } catch (_) {
-        // Fall back to DB cache
+      } catch (e, stackTrace) {
+        appLogger.e('Failed to fetch API data for widget, falling back to cache', error: e, stackTrace: stackTrace);
       }
     }
 
-    // Use DB cache
     final users = await db.getAllUsers();
     Map<String, dynamic>? userRecord;
     int? userId;
@@ -243,10 +214,8 @@ class WidgetDataService {
 
     if (userId != null) {
       final history = await db.getRecordsForUser(userId);
-      final dataPoints = _extractDataPoints(
-          history, config.modeKey, config.fieldKey, config);
+      final dataPoints = _extractDataPoints(history, config.modeKey, config.fieldKey, config);
 
-      // Get current value from latest record
       dynamic currentValue;
       final latestJson = userRecord?[config.modeKey] as String?;
       if (latestJson != null && latestJson.isNotEmpty) {
@@ -254,7 +223,9 @@ class WidgetDataService {
           final data = jsonDecode(latestJson) as Map<String, dynamic>;
           final stats = data['statistics'] as Map<String, dynamic>? ?? {};
           currentValue = stats[config.fieldKey];
-        } catch (_) {}
+        } catch (e, stackTrace) {
+          appLogger.e('Failed to parse cached user data', error: e, stackTrace: stackTrace);
+        }
       }
 
       final formattedValue = _formatStatValue(currentValue, config.fieldKey);
@@ -280,21 +251,20 @@ class WidgetDataService {
     int? startTimeMs;
     final now = DateTime.now();
 
-    if (config.timeRange == '1天') {
+    if (config.timeRange == AppConstants.range1Day) {
       startTimeMs = now.subtract(const Duration(days: 1)).millisecondsSinceEpoch;
-    } else if (config.timeRange == '3天') {
+    } else if (config.timeRange == AppConstants.range3Days) {
       startTimeMs = now.subtract(const Duration(days: 3)).millisecondsSinceEpoch;
-    } else if (config.timeRange == '7天') {
+    } else if (config.timeRange == AppConstants.range7Days) {
       startTimeMs = now.subtract(const Duration(days: 7)).millisecondsSinceEpoch;
-    } else if (config.timeRange == '1个月') {
+    } else if (config.timeRange == AppConstants.range1Month) {
       startTimeMs = now.subtract(const Duration(days: 30)).millisecondsSinceEpoch;
-    } else if (config.timeRange == '自定义' && config.customDays > 0) {
-      startTimeMs =
-          now.subtract(Duration(days: config.customDays)).millisecondsSinceEpoch;
+    } else if (config.timeRange == AppConstants.rangeCustom && config.customDays > 0) {
+      startTimeMs = now.subtract(Duration(days: config.customDays)).millisecondsSinceEpoch;
     }
 
     for (final record in history.reversed) {
-      final updatedAt = record['updated_at'] as int;
+      final updatedAt = record[AppConstants.colUpdatedAt] as int;
       if (startTimeMs != null && updatedAt < startTimeMs) {
         continue;
       }
@@ -307,8 +277,6 @@ class WidgetDataService {
           final value = stats[fieldKey];
           if (value != null) {
             num numValue = value as num;
-
-            // Bug 4 fix: Apply data transforms consistent with chart_page.dart
             if (fieldKey == 'accuracy') {
               numValue = numValue * 100;
             } else if (fieldKey == 'play_time') {
@@ -322,7 +290,9 @@ class WidgetDataService {
               'value': numValue.toDouble(),
             });
           }
-        } catch (_) {}
+        } catch (e) {
+          appLogger.e('Failed to parse history point', error: e);
+        }
       }
     }
 
@@ -342,17 +312,14 @@ class WidgetDataService {
     }
   }
 
-  /// Check if chart bitmap is stale
   Future<bool> isChartStale(int widgetId) async {
     final prefs = await SharedPreferences.getInstance();
-    final lastRender =
-        prefs.getInt('widget_${widgetId}_last_chart_render') ?? 0;
+    final lastRender = prefs.getInt('widget_${widgetId}_last_chart_render') ?? 0;
     if (lastRender == 0) return true;
     final lastTime = DateTime.fromMillisecondsSinceEpoch(lastRender);
     return DateTime.now().difference(lastTime).inMinutes >= _chartStaleMinutes;
   }
 
-  /// Refresh all widgets' chart bitmaps (called on app foreground)
   Future<void> refreshAllWidgetCharts() async {
     final activeIds = await getActiveWidgetIds();
     for (final widgetId in activeIds) {
@@ -361,32 +328,24 @@ class WidgetDataService {
         if (config == null) continue;
         if (!await isChartStale(widgetId)) continue;
         await refreshWidget(widgetId, config);
-      } catch (_) {
-        // Silently skip failed widgets
+      } catch (e, stackTrace) {
+        appLogger.e('Failed to refresh widget $widgetId', error: e, stackTrace: stackTrace);
       }
     }
   }
 
-  /// Refresh a single widget (fetch data + render chart + update native widget)
   Future<void> refreshWidget(int widgetId, WidgetConfig config) async {
     final data = await fetchWidgetData(config);
     if (data == null) return;
 
     final prefs = await SharedPreferences.getInstance();
 
-    // Save text values for native widget
-    await prefs.setString('widget_${widgetId}_current_value',
-        data['currentValueFormatted'] as String? ?? '-');
-    await prefs.setString(
-        'widget_${widgetId}_username', config.username);
-    await prefs.setString(
-        'widget_${widgetId}_field_label', config.fieldLabel);
-    await prefs.setString(
-        'widget_${widgetId}_mode_display', config.modeDisplay);
-    await prefs.setInt('widget_${widgetId}_last_api_fetch',
-        DateTime.now().millisecondsSinceEpoch);
+    await prefs.setString('widget_${widgetId}_current_value', data['currentValueFormatted'] as String? ?? '-');
+    await prefs.setString('widget_${widgetId}_username', config.username);
+    await prefs.setString('widget_${widgetId}_field_label', config.fieldLabel);
+    await prefs.setString('widget_${widgetId}_mode_display', config.modeDisplay);
+    await prefs.setInt('widget_${widgetId}_last_api_fetch', DateTime.now().millisecondsSinceEpoch);
 
-    // Render chart bitmap (simplified: just chart, no text overlay)
     try {
       final dataPoints = data['dataPoints'] as List<Map<String, dynamic>>? ?? [];
 
@@ -397,19 +356,15 @@ class WidgetDataService {
         heightDp: 80.0,
       );
 
-      await prefs.setString(
-          'widget_${widgetId}_chart_path', chartFile.path);
-      await prefs.setInt('widget_${widgetId}_last_chart_render',
-          DateTime.now().millisecondsSinceEpoch);
-    } catch (_) {
-      // Chart rendering failure is non-fatal; widget shows text only
+      await prefs.setString('widget_${widgetId}_chart_path', chartFile.path);
+      await prefs.setInt('widget_${widgetId}_last_chart_render', DateTime.now().millisecondsSinceEpoch);
+    } catch (e, stackTrace) {
+      appLogger.e('Chart rendering failed for widget $widgetId', error: e, stackTrace: stackTrace);
     }
 
-    // Trigger native widget update
     await updateAllWidgets();
   }
 
-  /// Delete all data for a widget
   Future<void> deleteWidgetConfig(int widgetId) async {
     final prefs = await SharedPreferences.getInstance();
     final keys = [

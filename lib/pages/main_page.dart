@@ -5,6 +5,8 @@ import '../services/osu_api_service.dart';
 import '../services/database_service.dart';
 import '../utils.dart';
 import 'chart_page.dart';
+import 'package:provider/provider.dart';
+import '../providers/app_state_provider.dart';
 
 class MainPage extends StatefulWidget {
   const MainPage({super.key});
@@ -277,9 +279,9 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
       );
     }
 
-    return ValueListenableBuilder<CompareTarget>(
-      valueListenable: compareTargetNotifier,
-      builder: (context, compareTarget, _) {
+    return Consumer<AppStateProvider>(
+      builder: (context, provider, _) {
+        final compareTarget = provider.compareTarget;
         return TabBarView(
           controller: _tabController,
           children: List.generate(4, (tabIndex) {

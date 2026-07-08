@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 String formatNum(dynamic val) {
   if (val == null) return '-';
@@ -192,40 +191,6 @@ bool areStatsDifferent(Map<String, dynamic>? data1, Map<String, dynamic>? data2)
   return false;
 }
 
-enum AppThemeMode { system, light, dark }
-
-class ThemeSettings {
-  final AppThemeMode themeMode;
-  final Color seedColor;
-  final bool useDynamicColor;
-
-  ThemeSettings({
-    required this.themeMode,
-    required this.seedColor,
-    required this.useDynamicColor,
-  });
-
-  ThemeSettings copyWith({
-    AppThemeMode? themeMode,
-    Color? seedColor,
-    bool? useDynamicColor,
-  }) {
-    return ThemeSettings(
-      themeMode: themeMode ?? this.themeMode,
-      seedColor: seedColor ?? this.seedColor,
-      useDynamicColor: useDynamicColor ?? this.useDynamicColor,
-    );
-  }
-}
-
-final themeSettingsNotifier = ValueNotifier<ThemeSettings>(
-  ThemeSettings(
-    themeMode: AppThemeMode.system,
-    seedColor: const Color(0xFF3498DB),
-    useDynamicColor: true,
-  ),
-);
-
 // Predefined colors for settings
 const List<Map<String, dynamic>> predefinedColors = [
   {'name': 'osu! 粉', 'color': Color(0xFFFF66AA)},
@@ -236,42 +201,3 @@ const List<Map<String, dynamic>> predefinedColors = [
   {'name': '烈焰红', 'color': Color(0xFFE74C3C)},
 ];
 
-
-void updateThemeSettings({
-  AppThemeMode? themeMode,
-  Color? seedColor,
-  bool? useDynamicColor,
-}) async {
-  final current = themeSettingsNotifier.value;
-  final updated = current.copyWith(
-    themeMode: themeMode,
-    seedColor: seedColor,
-    useDynamicColor: useDynamicColor,
-  );
-  themeSettingsNotifier.value = updated;
-
-  final prefs = await SharedPreferences.getInstance();
-  if (themeMode != null) {
-    await prefs.setInt('theme_mode_pref', themeMode.index);
-  }
-  if (seedColor != null) {
-    await prefs.setInt('theme_color_pref', seedColor.toARGB32());
-  }
-  if (useDynamicColor != null) {
-    await prefs.setBool('use_dynamic_color_pref', useDynamicColor);
-  }
-}
-
-enum CompareTarget {
-  lastQuery,
-  todayEarliest,
-  yesterdayLatest,
-}
-
-final compareTargetNotifier = ValueNotifier<CompareTarget>(CompareTarget.lastQuery);
-
-void updateCompareTarget(CompareTarget target) async {
-  compareTargetNotifier.value = target;
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setInt('compare_target_pref', target.index);
-}

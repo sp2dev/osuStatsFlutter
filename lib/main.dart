@@ -3,20 +3,23 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:workmanager/workmanager.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'pages/main_page.dart';
 import 'pages/history_page.dart';
 import 'pages/profile_page.dart';
 import 'pages/widget_config_page.dart';
 import 'pages/chart_page.dart';
+
 import 'services/widget_data_service.dart';
 import 'services/database_service.dart';
 import 'widgets/widget_background_callback.dart';
-import 'utils.dart';
+import 'providers/app_state_provider.dart';
+import 'core/logger.dart';
 
-/// Workmanager 后台任务回调（必须是顶层函数，且加 @pragma 注解）
 @pragma('vm:entry-point')
 void workmanagerCallbackDispatcher() {
   Workmanager().executeTask((taskName, inputData) async {
@@ -26,8 +29,8 @@ void workmanagerCallbackDispatcher() {
         databaseFactory = databaseFactoryFfi;
       }
       await WidgetDataService().refreshAllWidgetCharts();
-    } catch (_) {
-      // 后台任务失败静默处理，保留上次数据
+    } catch (e, stack) {
+      appLogger.e('Background task failed', error: e, stackTrace: stack);
     }
     return Future.value(true);
   });
@@ -36,7 +39,6 @@ void workmanagerCallbackDispatcher() {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Register home_widget background callback (handles on-demand widget taps)
   HomeWidget.registerInteractivityCallback(widgetBackgroundCallback);
 
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
@@ -44,38 +46,34 @@ void main() async {
     databaseFactory = databaseFactoryFfi;
   }
 
-  // 初始化 Workmanager 并注册每 60 分钟自动刷新小组件的周期任务
   if (!kIsWeb && Platform.isAndroid) {
-    await Workmanager().initialize(workmanagerCallbackDispatcher);
-    await Workmanager().registerPeriodicTask(
-      'widget_auto_refresh',
-      'widgetRefreshTask',
-      frequency: const Duration(minutes: 60),
-      existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
-      constraints: Constraints(
-        networkType: NetworkType.connected,
-      ),
-      backoffPolicy: BackoffPolicy.linear,
-      backoffPolicyDelay: const Duration(minutes: 5),
-    );
+    try {
+      await Workmanager().initialize(workmanagerCallbackDispatcher);
+      await Workmanager().registerPeriodicTask(
+        'widget_auto_refresh',
+        'widgetRefreshTask',
+        frequency: const Duration(minutes: 60),
+        existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
+        constraints: Constraints(
+          networkType: NetworkType.connected,
+        ),
+        backoffPolicy: BackoffPolicy.linear,
+        backoffPolicyDelay: const Duration(minutes: 5),
+      );
+    } catch (e, stack) {
+      appLogger.e('Failed to init workmanager', error: e, stackTrace: stack);
+    }
   }
 
-  // Load saved theme settings
-  final prefs = await SharedPreferences.getInstance();
-  final themeModeIndex = prefs.getInt('theme_mode_pref') ?? AppThemeMode.system.index;
-  final colorValue = prefs.getInt('theme_color_pref') ?? const Color(0xFF3498DB).toARGB32();
-  final useDynamic = prefs.getBool('use_dynamic_color_pref') ?? false;
+  final appStateProvider = AppStateProvider();
+  await appStateProvider.loadSettings();
 
-  themeSettingsNotifier.value = ThemeSettings(
-    themeMode: AppThemeMode.values[themeModeIndex],
-    seedColor: Color(colorValue),
-    useDynamicColor: useDynamic,
+  runApp(
+    ChangeNotifierProvider.value(
+      value: appStateProvider,
+      child: const MyApp(),
+    ),
   );
-
-  final compareTargetIndex = prefs.getInt('compare_target_pref') ?? CompareTarget.lastQuery.index;
-  compareTargetNotifier.value = CompareTarget.values[compareTargetIndex];
-
-  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -83,9 +81,9 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<ThemeSettings>(
-      valueListenable: themeSettingsNotifier,
-      builder: (context, settings, _) {
+    return Consumer<AppStateProvider>(
+      builder: (context, provider, _) {
+        final settings = provider.themeSettings;
         ThemeMode currentThemeMode;
         switch (settings.themeMode) {
           case AppThemeMode.system:
@@ -153,7 +151,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // Check for pending widget configuration after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkPendingWidgetConfig();
     });
@@ -176,47 +173,45 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _checkPendingWidgetConfig() async {
     final prefs = await SharedPreferences.getInstance();
 
-    // Reload from disk to pick up values written by Kotlin's native commit()
-    // (Flutter caches SharedPreferences in memory, so cross-process writes
-    // are invisible until we explicitly reload)
     await prefs.reload();
 
-    // Check for widget tap: the native provider writes last_tapped_widget_id
-    // when the user taps an unconfigured widget on the home screen.
     final tappedId = prefs.getInt('last_tapped_widget_id');
     if (tappedId != null && tappedId != 0) {
       await prefs.remove('last_tapped_widget_id');
-      // Also remove the pending marker the provider wrote
       await prefs.remove('pending_widget_$tappedId');
       
-      final config = await WidgetDataService().loadWidgetConfig(tappedId);
-      if (config != null) {
-        final db = DatabaseService();
-        final users = await db.getAllUsers();
-        int? userId;
-        for (final u in users) {
-          if (u['username'] == config.username) {
-            userId = u['user_id'] as int?;
-            break;
+      try {
+        final config = await WidgetDataService().loadWidgetConfig(tappedId);
+        if (config != null) {
+          final db = DatabaseService();
+          final users = await db.getAllUsers();
+          int? userId;
+          for (final u in users) {
+            if (u['username'] == config.username) {
+              userId = u['user_id'] as int?;
+              break;
+            }
+          }
+          if (userId != null) {
+            final history = await db.getRecordsForUser(userId);
+            if (!mounted) return;
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ChartPage(
+                  username: config.username,
+                  statLabel: config.fieldLabel,
+                  fieldKey: config.fieldKey,
+                  modeKey: config.modeKey,
+                  history: history,
+                ),
+              ),
+            );
+            return;
           }
         }
-        if (userId != null) {
-          final history = await db.getRecordsForUser(userId);
-          if (!mounted) return;
-          await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ChartPage(
-                username: config.username,
-                statLabel: config.fieldLabel,
-                fieldKey: config.fieldKey,
-                modeKey: config.modeKey,
-                history: history,
-              ),
-            ),
-          );
-          return;
-        }
+      } catch (e, stack) {
+        appLogger.e('Error loading widget config for $tappedId', error: e, stackTrace: stack);
       }
 
       if (!mounted) return;
@@ -232,7 +227,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return;
     }
 
-    // Check for old-style pending widget config (from previous version)
     final pendingWidgetId = prefs.getInt('pending_widget_config_id');
     if (pendingWidgetId != null && pendingWidgetId != 0) {
       await prefs.remove('pending_widget_config_id');
@@ -252,8 +246,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _refreshWidgetData() async {
     try {
       await WidgetDataService().refreshAllWidgetCharts();
-    } catch (_) {
-      // Silently fail — widgets keep showing last good data
+    } catch (e, stack) {
+      appLogger.e('Widget data refresh failed in foreground', error: e, stackTrace: stack);
     }
   }
 
