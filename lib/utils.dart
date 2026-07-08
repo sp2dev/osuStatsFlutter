@@ -129,8 +129,14 @@ List<Map<String, dynamic>> buildStatsItems(Map<String, dynamic> data, [Map<Strin
           ? '#${formatNum(stats['country_rank'])}'
           : '-',
       'icon': country != null
-          ? Image.asset('assets/Flags/$country.png', width: 28, height: 28, fit: BoxFit.contain)
-          : Icons.flag,
+          ? Image.asset(
+              'assets/Flags/$country.png', 
+              width: 28, 
+              height: 28, 
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) => const Icon(Icons.public, size: 28),
+            )
+          : const Icon(Icons.public),
       'difference': _getDiffInfo(stats['country_rank'] as num?, prevStats?['country_rank'] as num?, lowerIsBetter: true),
     },
     {

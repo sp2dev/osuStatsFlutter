@@ -13,6 +13,7 @@ import 'pages/history_page.dart';
 import 'pages/profile_page.dart';
 import 'pages/widget_config_page.dart';
 import 'pages/chart_page.dart';
+import 'package:animations/animations.dart';
 
 import 'services/widget_data_service.dart';
 import 'services/database_service.dart';
@@ -254,13 +255,24 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _currentNavIndex,
-        children: const [
-          MainPage(),
-          HistoryPage(),
-          ProfilePage(),
-        ],
+      body: PageTransitionSwitcher(
+        duration: const Duration(milliseconds: 300),
+        transitionBuilder: (child, animation, secondaryAnimation) {
+          return FadeThroughTransition(
+            animation: animation,
+            secondaryAnimation: secondaryAnimation,
+            child: child,
+          );
+        },
+        child: IndexedStack(
+          key: ValueKey<int>(_currentNavIndex),
+          index: _currentNavIndex,
+          children: const [
+            MainPage(),
+            HistoryPage(),
+            ProfilePage(),
+          ],
+        ),
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentNavIndex,

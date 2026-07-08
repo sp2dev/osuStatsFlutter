@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/database_service.dart';
 import 'history_detail_page.dart';
+import 'package:shimmer/shimmer.dart';
+import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 
 class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
@@ -9,7 +11,10 @@ class HistoryPage extends StatefulWidget {
   State<HistoryPage> createState() => _HistoryPageState();
 }
 
-class _HistoryPageState extends State<HistoryPage> {
+class _HistoryPageState extends State<HistoryPage> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   final DatabaseService _db = DatabaseService();
 
   List<Map<String, dynamic>> _users = [];
@@ -57,8 +62,9 @@ class _HistoryPageState extends State<HistoryPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return _buildSkeleton();
     }
 
     if (_users.isEmpty) {
@@ -109,13 +115,15 @@ class _HistoryPageState extends State<HistoryPage> {
       padding: MediaQuery.of(context).padding,
       child: RefreshIndicator(
         onRefresh: _loadUsers,
-        child: ListView.builder(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-          itemCount: filtered.isEmpty ? 3 : filtered.length + 2,
+        child: AnimationLimiter(
+          child: ListView.builder(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            itemCount: filtered.isEmpty ? 3 : filtered.length + 2,
           itemBuilder: (context, index) {
+            Widget childWidget;
             if (index == 0) {
-              return Padding(
+              childWidget = Padding(
                 padding: const EdgeInsets.only(bottom: 16),
                 child: Container(
                   padding: const EdgeInsets.all(20),
@@ -187,9 +195,8 @@ class _HistoryPageState extends State<HistoryPage> {
                   ),
                 ),
               );
-            }
-            if (index == 1) {
-              return Padding(
+            } else if (index == 1) {
+              childWidget = Padding(
                 padding: const EdgeInsets.only(bottom: 16),
                 child: Card(
                   elevation: 0,
@@ -247,10 +254,8 @@ class _HistoryPageState extends State<HistoryPage> {
                   ),
                 ),
               );
-            }
-
-            if (filtered.isEmpty) {
-              return Padding(
+            } else if (filtered.isEmpty) {
+              childWidget = Padding(
                 padding: const EdgeInsets.only(top: 40),
                 child: Center(
                   child: Column(
@@ -272,17 +277,16 @@ class _HistoryPageState extends State<HistoryPage> {
                   ),
                 ),
               );
-            }
+            } else {
+              final user = filtered[index - 2];
+              final updatedAt = user['updated_at'] as int;
+              final dateStr = _formatRelativeTime(updatedAt);
+              final username = user['username'] as String;
+              final initial = username.isNotEmpty ? username[0].toUpperCase() : '?';
 
-            final user = filtered[index - 2];
-            final updatedAt = user['updated_at'] as int;
-            final dateStr = _formatRelativeTime(updatedAt);
-            final username = user['username'] as String;
-            final initial = username.isNotEmpty ? username[0].toUpperCase() : '?';
-
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Dismissible(
+              childWidget = Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Dismissible(
                 key: Key('record_${user['id']}'),
                 direction: DismissDirection.endToStart,
                 background: Container(
@@ -390,7 +394,20 @@ class _HistoryPageState extends State<HistoryPage> {
                 ),
               ),
             );
+          }
+
+            return AnimationConfiguration.staggeredList(
+              position: index,
+              duration: const Duration(milliseconds: 375),
+              child: SlideAnimation(
+                verticalOffset: 50.0,
+                child: FadeInAnimation(
+                  child: childWidget,
+                ),
+              ),
+            );
           },
+        ),
         ),
       ),
     );
@@ -487,6 +504,37 @@ class _HistoryPageState extends State<HistoryPage> {
             child: const Text('删除', style: TextStyle(color: Colors.red)),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSkeleton() {
+    return Shimmer.fromColors(
+      baseColor: Theme.of(context).colorScheme.surfaceContainerHigh,
+      highlightColor: Theme.of(context).colorScheme.surface,
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        itemCount: 8,
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return Container(
+              height: 140,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+              ),
+            );
+          }
+          return Container(
+            height: 80,
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+            ),
+          );
+        },
       ),
     );
   }

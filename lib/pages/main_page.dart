@@ -7,6 +7,8 @@ import '../utils.dart';
 import 'chart_page.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_state_provider.dart';
+import 'package:shimmer/shimmer.dart';
+import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 
 class MainPage extends StatefulWidget {
   const MainPage({super.key});
@@ -15,7 +17,9 @@ class MainPage extends StatefulWidget {
   State<MainPage> createState() => _MainPageState();
 }
 
-class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin {
+class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   late final TabController _tabController;
   final OsuApiService _apiService = OsuApiService();
 
@@ -155,6 +159,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final hasUsers = _userList.isNotEmpty;
     return Scaffold(
       appBar: AppBar(
@@ -236,7 +241,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return _buildSkeleton();
     }
 
     if (_error != null) {
@@ -363,15 +368,22 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
             final items = buildStatsItems(data, prevData);
         return RefreshIndicator(
           onRefresh: _loadAllData,
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            itemCount: items.length,
-            itemBuilder: (context, index) {
-              final item = items[index];
-              return Card(
-                elevation: 0,
-                color: Theme.of(context).colorScheme.surfaceContainerLow,
-                margin: const EdgeInsets.only(bottom: 12),
+          child: AnimationLimiter(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              itemCount: items.length,
+              itemBuilder: (context, index) {
+                final item = items[index];
+                return AnimationConfiguration.staggeredList(
+                  position: index,
+                  duration: const Duration(milliseconds: 375),
+                  child: SlideAnimation(
+                    verticalOffset: 50.0,
+                    child: FadeInAnimation(
+                      child: Card(
+                        elevation: 0,
+                        color: Theme.of(context).colorScheme.surfaceContainerLow,
+                        margin: const EdgeInsets.only(bottom: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                   side: BorderSide(
@@ -472,14 +484,40 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
                       }(),
                     ],
                   ),
+                  ),
                 ),
-              ));
-            },
+              ),
+            ),
+          ),
+        );
+              },
+            ),
           ),
         );
       }),
     );
       },
+    );
+  }
+
+  Widget _buildSkeleton() {
+    return Shimmer.fromColors(
+      baseColor: Theme.of(context).colorScheme.surfaceContainerHigh,
+      highlightColor: Theme.of(context).colorScheme.surface,
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        itemCount: 8,
+        itemBuilder: (context, index) {
+          return Container(
+            height: 80,
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+          );
+        },
+      ),
     );
   }
 }

@@ -14,7 +14,10 @@ class ProfilePage extends StatefulWidget {
   State<ProfilePage> createState() => _ProfilePageState();
 }
 
-class _ProfilePageState extends State<ProfilePage> {
+class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   final _clientIdController = TextEditingController();
   final _clientSecretController = TextEditingController();
   final _usernameController = TextEditingController();
@@ -102,6 +105,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Consumer<AppStateProvider>(
       builder: (context, provider, _) {
         final themeSettings = provider.themeSettings;
