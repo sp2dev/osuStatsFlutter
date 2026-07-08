@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/osu_api_service.dart';
 import '../services/database_service.dart';
@@ -9,47 +10,67 @@ import 'package:provider/provider.dart';
 import '../providers/app_state_provider.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
+import '../core/constants.dart';
 
+List<Map<String, dynamic>> _parseHistoryInBackground(List<Map<String, dynamic>> historyRaw) {
+  return historyRaw.map((r) {
+    Map<String, dynamic>? parse(String key) {
+      final s = r[key] as String?;
+      if (s != null && s.isNotEmpty) {
+        try { return jsonDecode(s) as Map<String, dynamic>; } catch(_) {}
+      }
+      return null;
+    }
+    return {
+      'id': r['id'],
+      'updated_at': r['updated_at'],
+      'osu_json': parse('osu_json'),
+      'taiko_json': parse('taiko_json'),
+      'fruits_json': parse('fruits_json'),
+      'mania_json': parse('mania_json'),
+    };
+  }).toList();
+}
 class MainPage extends StatefulWidget {
   const MainPage({super.key});
-
   @override
   State<MainPage> createState() => _MainPageState();
 }
-
 class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
   late final TabController _tabController;
   final OsuApiService _apiService = OsuApiService();
-
   static const _modes = ['osu', 'taiko', 'fruits', 'mania'];
-
   final List<Map<String, dynamic>?> _modeData = [null, null, null, null];
   List<Map<String, dynamic>> _userHistory = [];
+  List<Map<String, dynamic>> _parsedHistory = [];
   List<String> _userList = [];
   bool _isLoading = true;
   String? _error;
   String? _targetUser;
-
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(_onTabChanged);
     _loadAllData();
   }
-
+  void _onTabChanged() {
+    if (_tabController.indexIsChanging) return;
+    if (_modeData[_tabController.index] == null && _targetUser != null && !_isLoading) {
+      _fetchModeData(_tabController.index);
+    }
+  }
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
   }
-
   Future<void> _loadAllData() async {
     final db = DatabaseService();
     final users = await db.getAllUsers();
     final uniqueNames = users.map((u) => u['username'] as String).toSet().toList()..sort();
-
     final prefs = await SharedPreferences.getInstance();
     final username = prefs.getString('query_username');
     if (username == null || username.isEmpty) {
@@ -57,106 +78,99 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
         _targetUser = null;
         _userList = uniqueNames;
         _isLoading = false;
-        _error = uniqueNames.isNotEmpty
-            ? '请在顶部选择用户或先到"设置"页面输入用户名'
-            : '请先到"设置"页面输入用户名再查询';
+        _error = null;
       });
       return;
     }
-
     _targetUser = username;
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
-    final results = await Future.wait(
-      _modes.map((mode) async {
-        try {
-          return await _apiService.getUserData(username, mode);
-        } catch (e) {
-          return null;
-        }
-      }),
-    );
-
+    _userList = uniqueNames;
+    for (int i = 0; i < 4; i++) {
+      _modeData[i] = null;
+    }
+    await _fetchModeData(_tabController.index);
     if (!mounted) return;
-
-    List<Map<String, dynamic>> userHistory = [];
-    Map<String, dynamic>? firstSuccess;
-    for (final r in results) {
-      if (r != null) {
-        firstSuccess = r;
-        break;
-      }
-    }
-    if (firstSuccess != null) {
-      final userId = firstSuccess['id'] as int?;
-      if (userId != null) {
-        userHistory = await DatabaseService().getRecordsForUser(userId);
-      }
-    }
-
-    // Refresh user list in case a new user was queried
     final updatedUsers = await db.getAllUsers();
     final updatedNames = updatedUsers.map((u) => u['username'] as String).toSet().toList()..sort();
     if (!updatedNames.contains(username)) {
       updatedNames.insert(0, username);
     }
-
     setState(() {
-      for (int i = 0; i < results.length; i++) {
-        _modeData[i] = results[i];
-      }
-      _userHistory = userHistory;
       _userList = updatedNames;
-      _isLoading = false;
     });
-
-    _saveToDatabase(results);
   }
-
-  Future<void> _saveToDatabase(List<Map<String, dynamic>?> results) async {
-    Map<String, dynamic>? firstSuccess;
-    for (final r in results) {
-      if (r != null) {
-        firstSuccess = r;
-        break;
+  Future<void> _fetchModeData(int index) async {
+    final username = _targetUser;
+    if (username == null) return;
+    setState(() => _isLoading = true);
+    try {
+      final data = await _apiService.getUserData(username, _modes[index]);
+      if (mounted) {
+        setState(() {
+          _modeData[index] = data;
+          _isLoading = false;
+          _error = null;
+        });
+        _saveToDatabaseSingleMode(data, _modes[index]);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = '获取 ${_modes[index]} 数据失败: $e';
+          _isLoading = false;
+        });
       }
     }
-    if (firstSuccess == null) return;
-
-    final userId = firstSuccess['id'] as int?;
-    final username = firstSuccess['username'] as String?;
+  }
+  Future<void> _saveToDatabaseSingleMode(Map<String, dynamic>? data, String mode) async {
+    if (data == null) return;
+    final userId = data['id'] as int?;
+    final username = data['username'] as String?;
     if (userId == null || username == null) return;
-
+    final stats = data['statistics'] as Map<String, dynamic>?;
+    if (stats == null || stats['play_count'] == null) {
+      return; 
+    }
     final db = DatabaseService();
-    final changed = await db.hasChangedFromLatest(
-      userId: userId,
-      osuData: results[0],
-      taikoData: results[1],
-      fruitsData: results[2],
-      maniaData: results[3],
-    );
-    if (!changed) return;
-
+    final modeKeyMap = {
+      'osu': AppConstants.colOsuJson,
+      'taiko': AppConstants.colTaikoJson,
+      'fruits': AppConstants.colFruitsJson,
+      'mania': AppConstants.colManiaJson,
+    };
+    final modeKey = modeKeyMap[mode]!;
+    if (!(await db.hasModeChangedFromLatest(userId: userId, modeKey: modeKey, newData: data))) {
+      final history = await db.getRecordsForUser(userId);
+      final parsed = await compute(_parseHistoryInBackground, history);
+      if (mounted) {
+        setState(() {
+          _userHistory = history;
+          _parsedHistory = parsed;
+        });
+      }
+      return; 
+    }
+    final latest = await db.getLatestRecord(userId);
     await db.saveUserData(
       userId: userId,
       username: username,
-      countryCode: firstSuccess['country_code'] as String?,
-      beatmapPlaycountsCount:
-          firstSuccess['beatmap_playcounts_count'] as int?,
-      followerCount: firstSuccess['follower_count'] as int?,
-      userAchievements: firstSuccess['user_achievements'] as List?,
-      osuJson: results[0] != null ? jsonEncode(results[0]) : null,
-      taikoJson: results[1] != null ? jsonEncode(results[1]) : null,
-      fruitsJson: results[2] != null ? jsonEncode(results[2]) : null,
-      maniaJson: results[3] != null ? jsonEncode(results[3]) : null,
+      countryCode: data['country_code'] as String?,
+      beatmapPlaycountsCount: data['beatmap_playcounts_count'] as int?,
+      followerCount: data['follower_count'] as int?,
+      userAchievements: data['user_achievements'] as List?,
+      osuJson: mode == 'osu' ? jsonEncode(data) : (latest?[AppConstants.colOsuJson] as String?),
+      taikoJson: mode == 'taiko' ? jsonEncode(data) : (latest?[AppConstants.colTaikoJson] as String?),
+      fruitsJson: mode == 'fruits' ? jsonEncode(data) : (latest?[AppConstants.colFruitsJson] as String?),
+      maniaJson: mode == 'mania' ? jsonEncode(data) : (latest?[AppConstants.colManiaJson] as String?),
     );
+    final history = await db.getRecordsForUser(userId);
+    final parsed = await compute(_parseHistoryInBackground, history);
+    if (mounted) {
+      setState(() {
+        _userHistory = history;
+        _parsedHistory = parsed;
+      });
+    }
   }
-
-
-
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -238,12 +252,48 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
           : null,
     );
   }
-
   Widget _buildBody() {
+    if (_targetUser == null) {
+      return Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.search, size: 64, color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5)),
+              const SizedBox(height: 24),
+              Text(
+                '欢迎使用 osu! Stats',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '输入 osu! 用户名开始查询',
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
+              const SizedBox(height: 32),
+              TextField(
+                decoration: InputDecoration(
+                  labelText: 'osu! 用户名',
+                  prefixIcon: const Icon(Icons.person),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+                onSubmitted: (val) async {
+                  if (val.trim().isNotEmpty) {
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setString('query_username', val.trim());
+                    _loadAllData();
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     if (_isLoading) {
       return _buildSkeleton();
     }
-
     if (_error != null) {
       return Center(
         child: Padding(
@@ -283,7 +333,6 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
         ),
       );
     }
-
     return Consumer<AppStateProvider>(
       builder: (context, provider, _) {
         final compareTarget = provider.compareTarget;
@@ -297,45 +346,33 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
             Map<String, dynamic>? prevData;
             final modeKeys = ['osu_json', 'taiko_json', 'fruits_json', 'mania_json'];
             final modeKey = modeKeys[tabIndex];
-            
             final now = DateTime.now();
             final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
-
             Map<String, dynamic>? findLastQuery() {
-              for (final record in _userHistory) {
-                final jsonStr = record[modeKey] as String?;
-                if (jsonStr != null && jsonStr.isNotEmpty) {
-                  try {
-                    final histData = jsonDecode(jsonStr) as Map<String, dynamic>;
-                    if (areStatsDifferent(data, histData)) {
-                      return histData;
-                    }
-                  } catch (_) {}
+              for (final record in _parsedHistory) {
+                final histData = record[modeKey] as Map<String, dynamic>?;
+                if (histData != null) {
+                  if (areStatsDifferent(data, histData)) {
+                    return histData;
+                  }
                 }
               }
               return null;
             }
-
             if (compareTarget == CompareTarget.lastQuery) {
               prevData = findLastQuery();
             } else if (compareTarget == CompareTarget.todayEarliest) {
               Map<String, dynamic>? earliestToday;
-              for (final record in _userHistory) {
+              for (final record in _parsedHistory) {
                 final updatedAt = record['updated_at'] as int;
                 if (updatedAt >= todayStart) {
-                  final jsonStr = record[modeKey] as String?;
-                  if (jsonStr != null && jsonStr.isNotEmpty) {
-                    try {
-                      final histData = jsonDecode(jsonStr) as Map<String, dynamic>;
-                      if (areStatsDifferent(data, histData)) {
-                        earliestToday = histData;
-                      } else {
-                        // If it's identical, we keep looking further back in today's records
-                        // (though earliest will just overwrite). But actually we want the
-                        // absolute earliest today. So we should just update earliestToday.
-                        earliestToday = histData;
-                      }
-                    } catch (_) {}
+                  final histData = record[modeKey] as Map<String, dynamic>?;
+                  if (histData != null) {
+                    if (areStatsDifferent(data, histData)) {
+                      earliestToday = histData;
+                    } else {
+                      earliestToday = histData;
+                    }
                   }
                 } else {
                   break;
@@ -347,15 +384,13 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
               prevData = earliestToday ?? findLastQuery();
             } else if (compareTarget == CompareTarget.yesterdayLatest) {
               Map<String, dynamic>? latestYesterday;
-              for (final record in _userHistory) {
+              for (final record in _parsedHistory) {
                 final updatedAt = record['updated_at'] as int;
                 if (updatedAt < todayStart) {
-                  final jsonStr = record[modeKey] as String?;
-                  if (jsonStr != null && jsonStr.isNotEmpty) {
-                    try {
-                      latestYesterday = jsonDecode(jsonStr) as Map<String, dynamic>;
-                      break;
-                    } catch (_) {}
+                  final histData = record[modeKey] as Map<String, dynamic>?;
+                  if (histData != null) {
+                    latestYesterday = histData;
+                    break;
                   }
                 }
               }
@@ -364,7 +399,6 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
               }
               prevData = latestYesterday ?? findLastQuery();
             }
-
             final items = buildStatsItems(data, prevData);
         return RefreshIndicator(
           onRefresh: _loadAllData,
@@ -499,7 +533,6 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
       },
     );
   }
-
   Widget _buildSkeleton() {
     return Shimmer.fromColors(
       baseColor: Theme.of(context).colorScheme.surfaceContainerHigh,

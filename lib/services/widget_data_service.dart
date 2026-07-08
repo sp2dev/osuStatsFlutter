@@ -161,8 +161,9 @@ class WidgetDataService {
       try {
         final apiData = await api.getUserData(config.username, modeDisplay);
         final userId = apiData['id'] as int?;
-        if (userId != null) {
-          final stats = apiData['statistics'] as Map<String, dynamic>? ?? {};
+        final stats = apiData['statistics'] as Map<String, dynamic>?;
+
+        if (userId != null && stats != null && stats['play_count'] != null) {
           final currentValue = stats[config.fieldKey];
 
           await prefs.setInt('widget_${config.widgetId}_last_api_fetch', DateTime.now().millisecondsSinceEpoch);
