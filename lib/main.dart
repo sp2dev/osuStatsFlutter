@@ -10,7 +10,9 @@ import 'pages/main_page.dart';
 import 'pages/history_page.dart';
 import 'pages/profile_page.dart';
 import 'pages/widget_config_page.dart';
+import 'pages/chart_page.dart';
 import 'services/widget_data_service.dart';
+import 'services/database_service.dart';
 import 'widgets/widget_background_callback.dart';
 import 'utils.dart';
 
@@ -186,6 +188,37 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       await prefs.remove('last_tapped_widget_id');
       // Also remove the pending marker the provider wrote
       await prefs.remove('pending_widget_$tappedId');
+      
+      final config = await WidgetDataService().loadWidgetConfig(tappedId);
+      if (config != null) {
+        final db = DatabaseService();
+        final users = await db.getAllUsers();
+        int? userId;
+        for (final u in users) {
+          if (u['username'] == config.username) {
+            userId = u['user_id'] as int?;
+            break;
+          }
+        }
+        if (userId != null) {
+          final history = await db.getRecordsForUser(userId);
+          if (!mounted) return;
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ChartPage(
+                username: config.username,
+                statLabel: config.fieldLabel,
+                fieldKey: config.fieldKey,
+                modeKey: config.modeKey,
+                history: history,
+              ),
+            ),
+          );
+          return;
+        }
+      }
+
       if (!mounted) return;
       final result = await Navigator.push<bool>(
         context,
