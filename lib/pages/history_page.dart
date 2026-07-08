@@ -3,6 +3,8 @@ import '../services/database_service.dart';
 import 'history_detail_page.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
+import 'package:provider/provider.dart';
+import '../providers/app_state_provider.dart';
 
 class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
@@ -42,6 +44,18 @@ class _HistoryPageState extends State<HistoryPage> with AutomaticKeepAliveClient
   void initState() {
     super.initState();
     _loadUsers();
+  }
+
+  int? _lastHistoryTrigger;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final currentTrigger = context.watch<AppStateProvider>().historyUpdateTrigger;
+    if (_lastHistoryTrigger != null && _lastHistoryTrigger != currentTrigger) {
+      _loadUsers();
+    }
+    _lastHistoryTrigger = currentTrigger;
   }
 
   Future<void> _loadUsers() async {

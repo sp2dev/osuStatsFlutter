@@ -132,6 +132,9 @@ class OsuApiService {
       return response.data as Map<String, dynamic>;
     } on DioException catch (e) {
       appLogger.e('Failed to fetch user data for $username ($mode)', error: e);
+      if (e.response?.statusCode == 404) {
+        throw Exception('未找到玩家 "$username" 的 $mode 模式数据，请检查用户名是否正确');
+      }
       throw Exception('获取 $username 的 $mode 数据失败: ${e.message}\n$_platformHint');
     }
   }

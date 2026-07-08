@@ -41,9 +41,16 @@ class AppStateProvider extends ChangeNotifier {
     useDynamicColor: true,
   );
   CompareTarget _compareTarget = CompareTarget.lastQuery;
+  int _historyUpdateTrigger = 0;
 
   ThemeSettings get themeSettings => _themeSettings;
   CompareTarget get compareTarget => _compareTarget;
+  int get historyUpdateTrigger => _historyUpdateTrigger;
+
+  void notifyHistoryUpdated() {
+    _historyUpdateTrigger++;
+    notifyListeners();
+  }
 
   Future<void> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();

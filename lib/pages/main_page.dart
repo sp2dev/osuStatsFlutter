@@ -169,6 +169,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
         _userHistory = history;
         _parsedHistory = parsed;
       });
+      Provider.of<AppStateProvider>(context, listen: false).notifyHistoryUpdated();
     }
   }
   @override
@@ -268,23 +269,8 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
               ),
               const SizedBox(height: 8),
               Text(
-                '输入 osu! 用户名开始查询',
+                '请前往 设置 - API 凭据设置 添加 API 凭据和查询用户名以开始',
                 style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-              ),
-              const SizedBox(height: 32),
-              TextField(
-                decoration: InputDecoration(
-                  labelText: 'osu! 用户名',
-                  prefixIcon: const Icon(Icons.person),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                ),
-                onSubmitted: (val) async {
-                  if (val.trim().isNotEmpty) {
-                    final prefs = await SharedPreferences.getInstance();
-                    await prefs.setString('query_username', val.trim());
-                    _loadAllData();
-                  }
-                },
               ),
             ],
           ),
@@ -296,8 +282,8 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
     }
     if (_error != null) {
       return Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
