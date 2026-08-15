@@ -57,7 +57,8 @@ class AppStateProvider extends ChangeNotifier {
     
     final themeModeIndex = prefs.getInt(AppConstants.keyThemeMode) ?? AppThemeMode.system.index;
     final colorValue = prefs.getInt(AppConstants.keyThemeColor) ?? const Color(0xFF3498DB).toARGB32();
-    final useDynamic = prefs.getBool(AppConstants.keyUseDynamicColor) ?? false;
+    // Keep in sync with the ThemeSettings constructor default (useDynamicColor: true).
+    final useDynamic = prefs.getBool(AppConstants.keyUseDynamicColor) ?? true;
     
     _themeSettings = ThemeSettings(
       themeMode: AppThemeMode.values[themeModeIndex],

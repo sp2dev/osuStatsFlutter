@@ -1,9 +1,24 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:shared_preferences/shared_preferences.dart';
 import '../core/secure_storage_service.dart';
-import '../core/constants.dart';
 import '../core/logger.dart';
+
+/// Typed API error so callers can branch on failure kind without
+/// string-matching error messages.
+class OsuApiException implements Exception {
+  const OsuApiException(this.message, {this.isUserNotFound = false, this.statusCode});
+
+  final String message;
+
+  /// True when the osu! API answered 404 (user/mode data not found).
+  final bool isUserNotFound;
+
+  /// Raw HTTP status code when one was present.
+  final int? statusCode;
+
+  @override
+  String toString() => message;
+}
 
 class OsuApiService {
   static const String _tokenUrl = 'https://osu.ppy.sh/oauth/token';
@@ -12,10 +27,18 @@ class OsuApiService {
   static const String defaultClientId = '';
   static const String defaultClientSecret = '';
 
-  late final Dio _dio;
+  /// Shared instance: each construction previously created a fresh Dio client
+  /// plus interceptors, which is wasted work for a stateless client.
+  static final OsuApiService instance = OsuApiService._();
 
-  OsuApiService() {
-    _dio = Dio(BaseOptions(
+  factory OsuApiService() => instance;
+
+  OsuApiService._();
+
+  late final Dio _dio = _createDio();
+
+  Dio _createDio() {
+    final dio = Dio(BaseOptions(
       baseUrl: _apiBase,
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
@@ -25,7 +48,7 @@ class OsuApiService {
       },
     ));
 
-    _dio.interceptors.add(InterceptorsWrapper(
+    dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
         // Don't attach token if it's the token endpoint
         if (options.path == _tokenUrl) {
@@ -42,11 +65,11 @@ class OsuApiService {
           try {
             await SecureStorageService.clearToken();
             final newToken = await _getToken();
-            
+
             // Retry request
             final opts = e.requestOptions;
             opts.headers['Authorization'] = 'Bearer $newToken';
-            
+
             final cloneReq = await _dio.fetch(opts);
             return handler.resolve(cloneReq);
           } catch (retryError) {
@@ -57,8 +80,8 @@ class OsuApiService {
         return handler.next(e);
       },
     ));
-    
-    _dio.interceptors.add(LogInterceptor(
+
+    dio.interceptors.add(LogInterceptor(
       request: true,
       requestHeader: false,
       responseHeader: false,
@@ -66,6 +89,8 @@ class OsuApiService {
       error: true,
       logPrint: (obj) => appLogger.d(obj.toString()),
     ));
+
+    return dio;
   }
 
   String get _platformHint {
@@ -91,9 +116,9 @@ class OsuApiService {
   }
 
   Future<String> _tokenWithClientCredentials() async {
-    final prefs = await SharedPreferences.getInstance();
-    final clientId = prefs.getString(AppConstants.keyClientId) ?? defaultClientId;
-    final clientSecret = prefs.getString(AppConstants.keyClientSecret) ?? defaultClientSecret;
+    final creds = await SecureStorageService.getClientCredentials();
+    final clientId = creds.clientId ?? defaultClientId;
+    final clientSecret = creds.clientSecret ?? defaultClientSecret;
 
     try {
       final response = await _dio.post(
@@ -118,10 +143,13 @@ class OsuApiService {
         await SecureStorageService.saveToken(accessToken, expiresAt);
         return accessToken;
       }
-      throw Exception('client_credentials 失败: ${response.statusCode}');
+      throw OsuApiException('client_credentials 失败: ${response.statusCode}', statusCode: response.statusCode);
     } on DioException catch (e) {
       appLogger.e('Token fetch failed', error: e);
-      throw Exception('网络请求失败\n$_platformHint\n\n原始错误: ${e.message}');
+      throw OsuApiException(
+        '网络请求失败\n$_platformHint\n\n原始错误: ${e.message}',
+        statusCode: e.response?.statusCode,
+      );
     }
   }
 
@@ -133,9 +161,16 @@ class OsuApiService {
     } on DioException catch (e) {
       appLogger.e('Failed to fetch user data for $username ($mode)', error: e);
       if (e.response?.statusCode == 404) {
-        throw Exception('未找到玩家 "$username" 的 $mode 模式数据，请检查用户名是否正确');
+        throw OsuApiException(
+          '未找到玩家 "$username" 的 $mode 模式数据，请检查用户名是否正确',
+          isUserNotFound: true,
+          statusCode: 404,
+        );
       }
-      throw Exception('获取 $username 的 $mode 数据失败: ${e.message}\n$_platformHint');
+      throw OsuApiException(
+        '获取 $username 的 $mode 数据失败: ${e.message}\n$_platformHint',
+        statusCode: e.response?.statusCode,
+      );
     }
   }
 }

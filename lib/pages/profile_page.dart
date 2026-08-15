@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/osu_api_service.dart';
+import '../core/secure_storage_service.dart';
 import '../utils.dart';
 import 'widget_config_page.dart';
 import 'package:provider/provider.dart';
@@ -32,13 +33,14 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
   }
 
   Future<void> _loadSaved() async {
+    // Client credentials now live in secure storage (migrated from the legacy
+    // plaintext SharedPreferences keys on first read).
+    final creds = await SecureStorageService.getClientCredentials();
+    final hasSavedCredentials = (creds.clientId?.isNotEmpty ?? false) ||
+        (creds.clientSecret?.isNotEmpty ?? false);
+    _clientIdController.text = creds.clientId ?? OsuApiService.defaultClientId;
+    _clientSecretController.text = creds.clientSecret ?? OsuApiService.defaultClientSecret;
     final prefs = await SharedPreferences.getInstance();
-    final hasSavedCredentials =
-        prefs.containsKey('client_id') || prefs.containsKey('client_secret');
-    _clientIdController.text =
-        prefs.getString('client_id') ?? OsuApiService.defaultClientId;
-    _clientSecretController.text =
-        prefs.getString('client_secret') ?? OsuApiService.defaultClientSecret;
     _usernameController.text = prefs.getString('query_username') ?? '';
     if (!mounted) return;
     setState(() {
@@ -49,9 +51,11 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
   Future<void> _saveCredentials() async {
     setState(() => _savingCredentials = true);
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('client_id', _clientIdController.text);
-      await prefs.setString('client_secret', _clientSecretController.text);
+      // Sensitive OAuth credentials go to secure storage, not plaintext prefs.
+      await SecureStorageService.saveClientCredentials(
+        clientId: _clientIdController.text,
+        clientSecret: _clientSecretController.text,
+      );
       if (!mounted) return;
       setState(() {
         _credentialsExpanded = false;

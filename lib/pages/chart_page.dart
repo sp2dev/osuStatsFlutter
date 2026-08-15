@@ -1,5 +1,5 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:fl_chart/fl_chart.dart';
 import '../utils.dart';
 
@@ -45,13 +45,19 @@ class _ChartPageState extends State<ChartPage> {
     super.dispose();
   }
 
-  void _processData() {
-    List<Map<String, dynamic>> dataPoints = [];
+  /// Bumped on every [_processData] start; stale async parses are dropped so
+  /// rapid range changes can never apply out-of-order results.
+  int _processGeneration = 0;
+
+  Future<void> _processData() async {
+    final generation = ++_processGeneration;
     int? startTimeMs;
     final now = DateTime.now();
 
     if (_selectedRange == '1天') {
       startTimeMs = now.subtract(const Duration(days: 1)).millisecondsSinceEpoch;
+    } else if (_selectedRange == '3天') {
+      startTimeMs = now.subtract(const Duration(days: 3)).millisecondsSinceEpoch;
     } else if (_selectedRange == '7天') {
       startTimeMs = now.subtract(const Duration(days: 7)).millisecondsSinceEpoch;
     } else if (_selectedRange == '1个月') {
@@ -60,38 +66,17 @@ class _ChartPageState extends State<ChartPage> {
       startTimeMs = now.subtract(Duration(days: _customDays)).millisecondsSinceEpoch;
     }
 
-    for (final record in widget.history) {
-      final updatedAt = record['updated_at'] as int;
-      if (startTimeMs != null && updatedAt < startTimeMs) {
-        continue;
-      }
-      
-      final jsonStr = record[widget.modeKey] as String?;
-      if (jsonStr != null && jsonStr.isNotEmpty) {
-        try {
-          final data = jsonDecode(jsonStr) as Map<String, dynamic>;
-          final stats = data['statistics'] as Map<String, dynamic>? ?? {};
-          final value = stats[widget.fieldKey];
-          if (value != null) {
-            num numValue = value as num;
-            if (widget.fieldKey == 'accuracy') {
-              numValue = numValue * 100;
-            } else if (widget.fieldKey == 'play_time') {
-              numValue = numValue / 3600.0; // hours
-            } else if (widget.fieldKey == 'global_rank' || widget.fieldKey == 'country_rank') {
-              numValue = -numValue;
-            }
+    // Heavy JSON decoding runs off the main isolate (shared util).
+    final dataPoints = await compute(computeDataPoints, {
+      'history': widget.history,
+      'modeKey': widget.modeKey,
+      'fieldKey': widget.fieldKey,
+      'startTimeMs': startTimeMs,
+    });
 
-            dataPoints.add({
-              'time': DateTime.fromMillisecondsSinceEpoch(updatedAt),
-              'value': numValue.toDouble(),
-            });
-          }
-        } catch (_) {}
-      }
-    }
+    if (!mounted || generation != _processGeneration) return;
 
-    dataPoints.sort((a, b) => (a['time'] as DateTime).compareTo(b['time'] as DateTime));
+    dataPoints.sort((a, b) => (a['time'] as int).compareTo(b['time'] as int));
 
     if (dataPoints.isEmpty) {
       setState(() {
@@ -103,19 +88,19 @@ class _ChartPageState extends State<ChartPage> {
 
     List<FlSpot> spots = [];
     List<DateTime> times = [];
-    
+
     double minY = dataPoints.first['value'];
     double maxY = dataPoints.first['value'];
 
     for (int i = 0; i < dataPoints.length; i++) {
       final val = dataPoints[i]['value'] as double;
       spots.add(FlSpot(i.toDouble(), val));
-      times.add(dataPoints[i]['time'] as DateTime);
+      times.add(DateTime.fromMillisecondsSinceEpoch(dataPoints[i]['time'] as int));
 
       if (val < minY) minY = val;
       if (val > maxY) maxY = val;
     }
-    
+
     if (minY == maxY) {
       minY -= 1;
       maxY += 1;
@@ -278,7 +263,7 @@ class _ChartPageState extends State<ChartPage> {
                           child: DropdownButton<String>(
                             value: _selectedRange,
                             isExpanded: true,
-                            items: ['全部', '1天', '7天', '1个月', '自定义']
+                            items: ['全部', '1天', '3天', '7天', '1个月', '自定义']
                                 .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                                 .toList(),
                             onChanged: (val) {

@@ -69,10 +69,17 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
   }
   Future<void> _loadAllData() async {
     final db = DatabaseService();
-    final users = await db.getAllUsers();
-    final uniqueNames = users.map((u) => u['username'] as String).toSet().toList()..sort();
     final prefs = await SharedPreferences.getInstance();
     final username = prefs.getString('query_username');
+    final uniqueNames = await db.getDistinctUsernames();
+
+    // Always keep the queried user in the picker list, even before their data
+    // has been persisted, so the dropdown never shows a *different* user than
+    // the one actually being queried.
+    if (username != null && username.isNotEmpty && !uniqueNames.contains(username)) {
+      uniqueNames.insert(0, username);
+    }
+
     if (username == null || username.isEmpty) {
       setState(() {
         _targetUser = null;
@@ -82,15 +89,19 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
       });
       return;
     }
+
     _targetUser = username;
     _userList = uniqueNames;
+    // History belongs to the previous target; reset so stale data is never
+    // shown while the new user loads.
+    _userHistory = [];
+    _parsedHistory = [];
     for (int i = 0; i < 4; i++) {
       _modeData[i] = null;
     }
     await _fetchModeData(_tabController.index);
     if (!mounted) return;
-    final updatedUsers = await db.getAllUsers();
-    final updatedNames = updatedUsers.map((u) => u['username'] as String).toSet().toList()..sort();
+    final updatedNames = await db.getDistinctUsernames();
     if (!updatedNames.contains(username)) {
       updatedNames.insert(0, username);
     }
@@ -139,15 +150,20 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
     };
     final modeKey = modeKeyMap[mode]!;
     if (!(await db.hasModeChangedFromLatest(userId: userId, modeKey: modeKey, newData: data))) {
-      final history = await db.getRecordsForUser(userId);
-      final parsed = await compute(_parseHistoryInBackground, history);
-      if (mounted) {
-        setState(() {
-          _userHistory = history;
-          _parsedHistory = parsed;
-        });
+      // Stats are unchanged → history is unchanged too. Only parse it when we
+      // don't already have it (first load or after a user switch), which makes
+      // repeated refreshes cheap.
+      if (_userHistory.isEmpty) {
+        final history = await db.getRecordsForUser(userId);
+        final parsed = await compute(_parseHistoryInBackground, history);
+        if (mounted) {
+          setState(() {
+            _userHistory = history;
+            _parsedHistory = parsed;
+          });
+        }
       }
-      return; 
+      return;
     }
     final latest = await db.getLatestRecord(userId);
     await db.saveUserData(
@@ -348,24 +364,19 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
             if (compareTarget == CompareTarget.lastQuery) {
               prevData = findLastQuery();
             } else if (compareTarget == CompareTarget.todayEarliest) {
+              // Records are newest-first; keep overwriting so the loop ends on
+              // the OLDEST record of today that differs from the live data.
               Map<String, dynamic>? earliestToday;
               for (final record in _parsedHistory) {
                 final updatedAt = record['updated_at'] as int;
                 if (updatedAt >= todayStart) {
                   final histData = record[modeKey] as Map<String, dynamic>?;
-                  if (histData != null) {
-                    if (areStatsDifferent(data, histData)) {
-                      earliestToday = histData;
-                    } else {
-                      earliestToday = histData;
-                    }
+                  if (histData != null && areStatsDifferent(data, histData)) {
+                    earliestToday = histData;
                   }
                 } else {
                   break;
                 }
-              }
-              if (earliestToday != null && !areStatsDifferent(data, earliestToday)) {
-                earliestToday = null;
               }
               prevData = earliestToday ?? findLastQuery();
             } else if (compareTarget == CompareTarget.yesterdayLatest) {
@@ -520,6 +531,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
     );
   }
   Widget _buildSkeleton() {
+    final placeholderColor = Theme.of(context).colorScheme.surfaceContainerHighest;
     return Shimmer.fromColors(
       baseColor: Theme.of(context).colorScheme.surfaceContainerHigh,
       highlightColor: Theme.of(context).colorScheme.surface,
@@ -531,7 +543,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
             height: 80,
             margin: const EdgeInsets.only(bottom: 12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: placeholderColor,
               borderRadius: BorderRadius.circular(16),
             ),
           );

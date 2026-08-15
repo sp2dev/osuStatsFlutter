@@ -236,9 +236,10 @@ open class OsustatsWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.widget_username, username)
             views.setTextViewText(R.id.widget_update_time, "等待首次更新")
             views.setViewVisibility(R.id.widget_chart, android.view.View.GONE)
-            if (!isLarge) {
-                views.setViewVisibility(R.id.widget_text_area, android.view.View.VISIBLE)
-            }
+            // No longer needed
+            // if (!isLarge) {
+            //     views.setViewVisibility(R.id.widget_text_area, android.view.View.VISIBLE)
+            // }
         }
 
         private fun showConfigPrompt(views: RemoteViews, isLarge: Boolean) {
@@ -248,9 +249,10 @@ open class OsustatsWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.widget_username, "")
             views.setTextViewText(R.id.widget_update_time, "未配置")
             views.setViewVisibility(R.id.widget_chart, android.view.View.GONE)
-            if (!isLarge) {
-                views.setViewVisibility(R.id.widget_text_area, android.view.View.VISIBLE)
-            }
+            // No longer needed
+            // if (!isLarge) {
+            //     views.setViewVisibility(R.id.widget_text_area, android.view.View.VISIBLE)
+            // }
         }
 
         private fun showConfiguredState(
@@ -285,9 +287,10 @@ open class OsustatsWidgetProvider : AppWidgetProvider() {
             }
 
             // Bug 5 fix: For 2x1, always keep text_area visible (show chart + text side by side)
-            if (!isLarge) {
-                views.setViewVisibility(R.id.widget_text_area, android.view.View.VISIBLE)
-            }
+            // No longer needed
+            // if (!isLarge) {
+            //     views.setViewVisibility(R.id.widget_text_area, android.view.View.VISIBLE)
+            // }
 
             val statValue = prefs.getString("flutter.widget_${appWidgetId}_current_value", "-")
             views.setTextViewText(R.id.widget_stat_value, statValue ?: "-")

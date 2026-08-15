@@ -331,9 +331,9 @@ class _HistoryPageState extends State<HistoryPage> with AutomaticKeepAliveClient
                     ),
                   );
                 },
-                onDismissed: (_) {
-                  _db.deleteRecord(user['id'] as int);
-                  _loadUsers();
+                onDismissed: (_) async {
+                  await _db.deleteRecord(user['id'] as int);
+                  if (mounted) await _loadUsers();
                 },
                 child: Card(
                   elevation: 0,
@@ -459,10 +459,10 @@ class _HistoryPageState extends State<HistoryPage> with AutomaticKeepAliveClient
             ListTile(
               leading: const Icon(Icons.delete),
               title: const Text('删除本条数据'),
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(ctx);
-                _db.deleteRecord(recordId);
-                _loadUsers();
+                await _db.deleteRecord(recordId);
+                if (mounted) _loadUsers();
               },
             ),
             ListTile(
@@ -472,7 +472,7 @@ class _HistoryPageState extends State<HistoryPage> with AutomaticKeepAliveClient
               onTap: () async {
                 Navigator.pop(ctx);
                 await _db.cleanupUserRecords(userId);
-                _loadUsers();
+                if (mounted) _loadUsers();
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('$username 的数据已清理')),
@@ -513,7 +513,7 @@ class _HistoryPageState extends State<HistoryPage> with AutomaticKeepAliveClient
             onPressed: () async {
               Navigator.pop(ctx);
               await _db.deleteAllRecordsForUser(userId);
-              _loadUsers();
+              if (mounted) _loadUsers();
             },
             child: const Text('删除', style: TextStyle(color: Colors.red)),
           ),
@@ -523,6 +523,7 @@ class _HistoryPageState extends State<HistoryPage> with AutomaticKeepAliveClient
   }
 
   Widget _buildSkeleton() {
+    final placeholderColor = Theme.of(context).colorScheme.surfaceContainerHighest;
     return Shimmer.fromColors(
       baseColor: Theme.of(context).colorScheme.surfaceContainerHigh,
       highlightColor: Theme.of(context).colorScheme.surface,
@@ -535,7 +536,7 @@ class _HistoryPageState extends State<HistoryPage> with AutomaticKeepAliveClient
               height: 140,
               margin: const EdgeInsets.only(bottom: 16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: placeholderColor,
                 borderRadius: BorderRadius.circular(24),
               ),
             );
@@ -544,7 +545,7 @@ class _HistoryPageState extends State<HistoryPage> with AutomaticKeepAliveClient
             height: 80,
             margin: const EdgeInsets.only(bottom: 12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: placeholderColor,
               borderRadius: BorderRadius.circular(18),
             ),
           );

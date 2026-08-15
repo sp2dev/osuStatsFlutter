@@ -1,8 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 String formatNum(dynamic val) {
   if (val == null) return '-';
-  final str = val is int ? val.toString() : val.toString();
+  final str = val.toString();
   if (str.isEmpty) return '-';
   
   final hasSign = str.startsWith('-') || str.startsWith('+');
@@ -76,7 +78,10 @@ Map<String, dynamic>? _getDiffInfo(num? current, num? previous, {bool lowerIsBet
   if (isPercent) {
     text = '$sign${(diff * 100).toStringAsFixed(2)}%';
   } else if (isTime) {
-    text = '$sign${formatDuration(diff.abs().toInt())}';
+    // formatDuration takes a magnitude; the sign must be added explicitly
+    // because diff may be negative.
+    final signStr = diff > 0 ? '+' : '-';
+    text = '$signStr${formatDuration(diff.abs().toInt())}';
   } else {
     if (diff == diff.toInt()) {
       text = '$sign${formatNum(diff.toInt())}';
@@ -206,4 +211,68 @@ const List<Map<String, dynamic>> predefinedColors = [
   {'name': '深邃紫', 'color': Color(0xFF9B59B6)},
   {'name': '烈焰红', 'color': Color(0xFFE74C3C)},
 ];
+
+/// Shared transformation of raw history rows into chart data points.
+///
+/// Centralizes stat normalization (accuracy → %, play_time → hours, rank
+/// inversion for "higher is better" charts) previously duplicated between the
+/// in-app chart page and the home-screen widget renderer.
+///
+/// Input order is preserved: pass history in chronological order for line
+/// charts. Malformed rows are skipped rather than crashing the chart.
+List<Map<String, dynamic>> buildDataPoints({
+  required List<Map<String, dynamic>> history,
+  required String modeKey,
+  required String fieldKey,
+  int? startTimeMs,
+}) {
+  final dataPoints = <Map<String, dynamic>>[];
+
+  for (final record in history) {
+    final updatedAt = record['updated_at'] as int;
+    if (startTimeMs != null && updatedAt < startTimeMs) {
+      continue;
+    }
+
+    final jsonStr = record[modeKey] as String?;
+    if (jsonStr == null || jsonStr.isEmpty) continue;
+    try {
+      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+      final stats = data['statistics'] as Map<String, dynamic>? ?? {};
+      final value = stats[fieldKey];
+      if (value == null) continue;
+
+      num numValue = value as num;
+      if (fieldKey == 'accuracy') {
+        numValue = numValue * 100;
+      } else if (fieldKey == 'play_time') {
+        numValue = numValue / 3600.0; // hours
+      } else if (fieldKey == 'global_rank' || fieldKey == 'country_rank') {
+        numValue = -numValue; // invert so "higher is better"
+      }
+
+      dataPoints.add({
+        // Epoch ms (int) keeps the payload trivially isolate-sendable;
+        // callers convert to DateTime when they need one.
+        'time': updatedAt,
+        'value': numValue.toDouble(),
+      });
+    } catch (_) {
+      // Skip malformed history entries.
+    }
+  }
+
+  return dataPoints;
+}
+
+/// [compute] entry point for [buildDataPoints]: runs the parse off the main
+/// isolate. `input` must be isolate-sendable.
+List<Map<String, dynamic>> computeDataPoints(Map<String, dynamic> input) {
+  return buildDataPoints(
+    history: (input['history'] as List).cast<Map<String, dynamic>>(),
+    modeKey: input['modeKey'] as String,
+    fieldKey: input['fieldKey'] as String,
+    startTimeMs: input['startTimeMs'] as int?,
+  );
+}
 
