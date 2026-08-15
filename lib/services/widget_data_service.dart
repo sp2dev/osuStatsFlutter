@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:home_widget/home_widget.dart';
 import '../utils.dart';
@@ -150,71 +152,80 @@ class WidgetDataService {
     return DateTime.now().difference(lastTime).inMinutes >= _cacheMinIntervalMinutes;
   }
 
-  Future<Map<String, dynamic>?> fetchWidgetData(WidgetConfig config) async {
+  Future<Map<String, dynamic>?> fetchWidgetData(
+    WidgetConfig config, {
+    /// Per-refresh-pass API result cache keyed by 'username|mode' so multiple
+    /// widgets configured for the same player/mode share a single request
+    /// instead of hitting the API once per widget.
+    Map<String, Map<String, dynamic>>? apiCache,
+  }) async {
     final db = DatabaseService();
     final api = OsuApiService();
     final prefs = await SharedPreferences.getInstance();
 
     final modeDisplay = modeKeyToDisplay(config.modeKey);
+    final cacheKey = '${config.username}|$modeDisplay';
 
-    if (await _shouldFetchFromApi(config.widgetId)) {
+    Map<String, dynamic>? apiData;
+    if (apiCache != null && apiCache.containsKey(cacheKey)) {
+      apiData = apiCache[cacheKey];
+    } else if (await _shouldFetchFromApi(config.widgetId)) {
       try {
-        final apiData = await api.getUserData(config.username, modeDisplay);
-        final userId = apiData['id'] as int?;
-        if (userId != null) {
-          final stats = apiData['statistics'] as Map<String, dynamic>? ?? {};
-          final currentValue = stats[config.fieldKey];
-
-          await prefs.setInt('widget_${config.widgetId}_last_api_fetch', DateTime.now().millisecondsSinceEpoch);
-          await prefs.setString('widget_${config.widgetId}_raw_data', jsonEncode(apiData));
-
-          if (await db.hasModeChangedFromLatest(userId: userId, modeKey: config.modeKey, newData: apiData)) {
-            final latest = await db.getLatestRecord(userId);
-            await db.saveUserData(
-              userId: userId,
-              username: config.username,
-              countryCode: apiData['country_code'] as String?,
-              beatmapPlaycountsCount: apiData['beatmap_playcounts_count'] as int?,
-              followerCount: apiData['follower_count'] as int?,
-              userAchievements: apiData['user_achievements'] as List?,
-              osuJson: config.modeKey == AppConstants.colOsuJson ? jsonEncode(apiData) : latest?[AppConstants.colOsuJson] as String?,
-              taikoJson: config.modeKey == AppConstants.colTaikoJson ? jsonEncode(apiData) : latest?[AppConstants.colTaikoJson] as String?,
-              fruitsJson: config.modeKey == AppConstants.colFruitsJson ? jsonEncode(apiData) : latest?[AppConstants.colFruitsJson] as String?,
-              maniaJson: config.modeKey == AppConstants.colManiaJson ? jsonEncode(apiData) : latest?[AppConstants.colManiaJson] as String?,
-            );
-            await db.cleanupUserRecords(userId);
-          }
-
-          final history = await db.getRecordsForUser(userId);
-          final dataPoints = _extractDataPoints(history, config.modeKey, config.fieldKey, config);
-          final formattedValue = _formatStatValue(currentValue, config.fieldKey);
-
-          return {
-            'dataPoints': dataPoints,
-            'currentValue': currentValue,
-            'currentValueFormatted': formattedValue,
-            'username': config.username,
-          };
-        }
+        apiData = await api.getUserData(config.username, modeDisplay);
+        if (apiCache != null) apiCache[cacheKey] = apiData;
       } catch (e, stackTrace) {
         appLogger.e('Failed to fetch API data for widget, falling back to cache', error: e, stackTrace: stackTrace);
       }
     }
 
-    final users = await db.getAllUsers();
-    Map<String, dynamic>? userRecord;
-    int? userId;
-    for (final u in users) {
-      if (u['username'] == config.username) {
-        userRecord = u;
-        userId = u['user_id'] as int?;
-        break;
+    if (apiData != null) {
+      final userId = apiData['id'] as int?;
+      final stats = apiData['statistics'] as Map<String, dynamic>?;
+
+      if (userId != null && stats != null && stats['play_count'] != null) {
+        final currentValue = stats[config.fieldKey];
+
+        await prefs.setInt('widget_${config.widgetId}_last_api_fetch', DateTime.now().millisecondsSinceEpoch);
+        await prefs.setString('widget_${config.widgetId}_raw_data', jsonEncode(apiData));
+
+        if (await db.hasModeChangedFromLatest(userId: userId, modeKey: config.modeKey, newData: apiData)) {
+          final latest = await db.getLatestRecord(userId);
+          await db.saveUserData(
+            userId: userId,
+            username: config.username,
+            countryCode: apiData['country_code'] as String?,
+            beatmapPlaycountsCount: apiData['beatmap_playcounts_count'] as int?,
+            followerCount: apiData['follower_count'] as int?,
+            userAchievements: apiData['user_achievements'] as List?,
+            osuJson: config.modeKey == AppConstants.colOsuJson ? jsonEncode(apiData) : latest?[AppConstants.colOsuJson] as String?,
+            taikoJson: config.modeKey == AppConstants.colTaikoJson ? jsonEncode(apiData) : latest?[AppConstants.colTaikoJson] as String?,
+            fruitsJson: config.modeKey == AppConstants.colFruitsJson ? jsonEncode(apiData) : latest?[AppConstants.colFruitsJson] as String?,
+            maniaJson: config.modeKey == AppConstants.colManiaJson ? jsonEncode(apiData) : latest?[AppConstants.colManiaJson] as String?,
+          );
+          await db.cleanupUserRecords(userId);
+        }
+
+        final history = await db.getRecordsForUser(userId);
+        final dataPoints = await _extractDataPoints(history, config.modeKey, config.fieldKey, config);
+        final formattedValue = _formatStatValue(currentValue, config.fieldKey);
+
+        return {
+          'dataPoints': dataPoints,
+          'currentValue': currentValue,
+          'currentValueFormatted': formattedValue,
+          'username': config.username,
+        };
       }
     }
 
+    // Cache fallback: newest known snapshot for this username (index-backed
+    // single-row lookup instead of scanning the whole table).
+    final userRecord = await db.getLatestRecordByUsername(config.username);
+    final userId = userRecord?[AppConstants.colUserId] as int?;
+
     if (userId != null) {
       final history = await db.getRecordsForUser(userId);
-      final dataPoints = _extractDataPoints(history, config.modeKey, config.fieldKey, config);
+      final dataPoints = await _extractDataPoints(history, config.modeKey, config.fieldKey, config);
 
       dynamic currentValue;
       final latestJson = userRecord?[config.modeKey] as String?;
@@ -241,13 +252,12 @@ class WidgetDataService {
     return null;
   }
 
-  List<Map<String, dynamic>> _extractDataPoints(
+  Future<List<Map<String, dynamic>>> _extractDataPoints(
     List<Map<String, dynamic>> history,
     String modeKey,
     String fieldKey,
     WidgetConfig config,
-  ) {
-    final dataPoints = <Map<String, dynamic>>[];
+  ) async {
     int? startTimeMs;
     final now = DateTime.now();
 
@@ -263,40 +273,14 @@ class WidgetDataService {
       startTimeMs = now.subtract(Duration(days: config.customDays)).millisecondsSinceEpoch;
     }
 
-    for (final record in history.reversed) {
-      final updatedAt = record[AppConstants.colUpdatedAt] as int;
-      if (startTimeMs != null && updatedAt < startTimeMs) {
-        continue;
-      }
-
-      final jsonStr = record[modeKey] as String?;
-      if (jsonStr != null && jsonStr.isNotEmpty) {
-        try {
-          final data = jsonDecode(jsonStr) as Map<String, dynamic>;
-          final stats = data['statistics'] as Map<String, dynamic>? ?? {};
-          final value = stats[fieldKey];
-          if (value != null) {
-            num numValue = value as num;
-            if (fieldKey == 'accuracy') {
-              numValue = numValue * 100;
-            } else if (fieldKey == 'play_time') {
-              numValue = numValue / 3600.0;
-            } else if (fieldKey == 'global_rank' || fieldKey == 'country_rank') {
-              numValue = -numValue;
-            }
-
-            dataPoints.add({
-              'time': DateTime.fromMillisecondsSinceEpoch(updatedAt),
-              'value': numValue.toDouble(),
-            });
-          }
-        } catch (e) {
-          appLogger.e('Failed to parse history point', error: e);
-        }
-      }
-    }
-
-    return dataPoints;
+    // History is newest-first; reverse to chronological order, then decode
+    // off the calling isolate via the shared util.
+    return compute(computeDataPoints, {
+      'history': history.reversed.toList(),
+      'modeKey': modeKey,
+      'fieldKey': fieldKey,
+      'startTimeMs': startTimeMs,
+    });
   }
 
   String _formatStatValue(dynamic value, String fieldKey) {
@@ -322,20 +306,26 @@ class WidgetDataService {
 
   Future<void> refreshAllWidgetCharts() async {
     final activeIds = await getActiveWidgetIds();
+    // One API result per (username, mode) for the whole pass.
+    final apiCache = <String, Map<String, dynamic>>{};
     for (final widgetId in activeIds) {
       try {
         final config = await loadWidgetConfig(widgetId);
         if (config == null) continue;
         if (!await isChartStale(widgetId)) continue;
-        await refreshWidget(widgetId, config);
+        await refreshWidget(widgetId, config, apiCache: apiCache);
       } catch (e, stackTrace) {
         appLogger.e('Failed to refresh widget $widgetId', error: e, stackTrace: stackTrace);
       }
     }
   }
 
-  Future<void> refreshWidget(int widgetId, WidgetConfig config) async {
-    final data = await fetchWidgetData(config);
+  Future<void> refreshWidget(
+    int widgetId,
+    WidgetConfig config, {
+    Map<String, Map<String, dynamic>>? apiCache,
+  }) async {
+    final data = await fetchWidgetData(config, apiCache: apiCache);
     if (data == null) return;
 
     final prefs = await SharedPreferences.getInstance();
@@ -386,5 +376,18 @@ class WidgetDataService {
     }
 
     await _removeActiveWidgetId(widgetId);
+
+    // Delete the rendered chart file so orphaned PNGs don't accumulate.
+    final chartPath = prefs.getString('widget_${widgetId}_chart_path');
+    if (chartPath != null && chartPath.isNotEmpty) {
+      try {
+        final file = File(chartPath);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      } catch (e, stackTrace) {
+        appLogger.e('Failed to delete chart file for widget $widgetId', error: e, stackTrace: stackTrace);
+      }
+    }
   }
 }

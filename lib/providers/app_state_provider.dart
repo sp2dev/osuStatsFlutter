@@ -41,16 +41,24 @@ class AppStateProvider extends ChangeNotifier {
     useDynamicColor: true,
   );
   CompareTarget _compareTarget = CompareTarget.lastQuery;
+  int _historyUpdateTrigger = 0;
 
   ThemeSettings get themeSettings => _themeSettings;
   CompareTarget get compareTarget => _compareTarget;
+  int get historyUpdateTrigger => _historyUpdateTrigger;
+
+  void notifyHistoryUpdated() {
+    _historyUpdateTrigger++;
+    notifyListeners();
+  }
 
   Future<void> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     
     final themeModeIndex = prefs.getInt(AppConstants.keyThemeMode) ?? AppThemeMode.system.index;
     final colorValue = prefs.getInt(AppConstants.keyThemeColor) ?? const Color(0xFF3498DB).toARGB32();
-    final useDynamic = prefs.getBool(AppConstants.keyUseDynamicColor) ?? false;
+    // Keep in sync with the ThemeSettings constructor default (useDynamicColor: true).
+    final useDynamic = prefs.getBool(AppConstants.keyUseDynamicColor) ?? true;
     
     _themeSettings = ThemeSettings(
       themeMode: AppThemeMode.values[themeModeIndex],

@@ -68,9 +68,7 @@ class _WidgetConfigPageState extends State<WidgetConfigPage> {
   Future<void> _loadUsers() async {
     try {
       final db = DatabaseService();
-      final users = await db.getAllUsers();
-      final names = users.map((u) => u['username'] as String).toSet().toList()
-        ..sort();
+      final names = await db.getDistinctUsernames();
       if (!mounted) return;
       setState(() {
         _userList = names;
@@ -104,12 +102,25 @@ class _WidgetConfigPageState extends State<WidgetConfigPage> {
       final username = _selectedUsername!.trim();
       final modeKey = _widgetService.modeDisplayToKey(_selectedMode);
 
-      // Try to validate by fetching data
+      // Try to validate by fetching data. A 404 (typed via OsuApiException)
+      // means the username is wrong — abort instead of saving a widget that
+      // can never update. Network/other errors are non-fatal when cache exists.
       try {
         final api = OsuApiService();
         await api.getUserData(username, _selectedMode);
+      } on OsuApiException catch (e) {
+        if (e.isUserNotFound) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('未找到玩家 "$username"，请检查用户名后再试')),
+            );
+            setState(() => _isSaving = false);
+          }
+          return;
+        }
+        // Other API failures: fall through (DB cache may still be usable).
       } catch (_) {
-        // API failure is not fatal if we have DB cache
+        // Network failures: fall through (DB cache may still be usable).
       }
 
       int widgetId;

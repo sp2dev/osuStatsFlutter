@@ -22,7 +22,7 @@ class DatabaseService {
     final path = join(dbPath, AppConstants.dbName);
     return openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE ${AppConstants.tableUserCache} (
@@ -40,8 +40,24 @@ class DatabaseService {
             ${AppConstants.colUpdatedAt} INTEGER NOT NULL
           )
         ''');
+        await _createIndexes(db);
         appLogger.i('Database initialized and tables created.');
       },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await _createIndexes(db);
+          appLogger.i('Database upgraded to v2 (history lookup indexes).');
+        }
+      },
+    );
+  }
+
+  /// Indexes backing the hot query paths (per-user history lookups).
+  /// Kept in a helper so onCreate/onUpgrade stay in sync.
+  static Future<void> _createIndexes(Database db) async {
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_user_cache_user_time '
+      'ON ${AppConstants.tableUserCache} (${AppConstants.colUserId}, ${AppConstants.colUpdatedAt} DESC)',
     );
   }
 
@@ -101,7 +117,9 @@ class DatabaseService {
     return jsonEncode({
       'beatmap_playcounts_count': data['beatmap_playcounts_count'],
       'follower_count': data['follower_count'],
-      'user_achievements': data['user_achievements'],
+      // Achievements only change by being granted, so their count is a
+      // sufficient (and much cheaper) change signal than the full list.
+      'achievements_count': (data['user_achievements'] as List?)?.length,
       'stats': {
         'global_rank': stats['global_rank'],
         'country_rank': stats['country_rank'],
@@ -194,6 +212,40 @@ class DatabaseService {
     } catch (e, stackTrace) {
       appLogger.e('Error getting all users', error: e, stackTrace: stackTrace);
       return [];
+    }
+  }
+
+  /// Lightweight distinct-username list (no full-table payload).
+  /// Used by screens that only need a name picker.
+  Future<List<String>> getDistinctUsernames() async {
+    try {
+      final db = await database;
+      final rows = await db.rawQuery(
+        'SELECT DISTINCT ${AppConstants.colUsername} FROM ${AppConstants.tableUserCache} '
+        'ORDER BY ${AppConstants.colUsername} COLLATE NOCASE',
+      );
+      return rows.map((r) => r[AppConstants.colUsername] as String).toList();
+    } catch (e, stackTrace) {
+      appLogger.e('Error getting distinct usernames', error: e, stackTrace: stackTrace);
+      return [];
+    }
+  }
+
+  /// Newest snapshot row for a username (index-backed single-row lookup).
+  Future<Map<String, dynamic>?> getLatestRecordByUsername(String username) async {
+    try {
+      final db = await database;
+      final results = await db.query(
+        AppConstants.tableUserCache,
+        where: '${AppConstants.colUsername} = ?',
+        whereArgs: [username],
+        orderBy: '${AppConstants.colUpdatedAt} DESC',
+        limit: 1,
+      );
+      return results.isNotEmpty ? results.first : null;
+    } catch (e, stackTrace) {
+      appLogger.e('Error getting latest record by username', error: e, stackTrace: stackTrace);
+      return null;
     }
   }
 
